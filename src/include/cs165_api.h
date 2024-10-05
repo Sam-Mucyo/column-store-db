@@ -25,9 +25,9 @@ SOFTWARE.
 #ifndef CS165_H
 #define CS165_H
 
-#include <stdlib.h>
 #include <stdbool.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 // Limits the size of a name in our database to 64 characters
 #define MAX_SIZE_NAME 64
@@ -42,24 +42,19 @@ SOFTWARE.
  * additional types.
  **/
 
-typedef enum DataType {
-     INT,
-     LONG,
-     FLOAT
-} DataType;
+typedef enum DataType { INT, LONG, FLOAT } DataType;
 
 struct Comparator;
-//struct ColumnIndex;
+// struct ColumnIndex;
 
 typedef struct Column {
-    char name[MAX_SIZE_NAME]; 
-    int* data;
-    // You will implement column indexes later. 
-    void* index;
-    //struct ColumnIndex *index;
-    //bool clustered;
+  char name[MAX_SIZE_NAME];
+  int *data;
+  // You will implement column indexes later.
+  void *index;
+  // struct ColumnIndex *index;
+  // bool clustered;
 } Column;
-
 
 /**
  * table
@@ -76,10 +71,10 @@ typedef struct Column {
  **/
 
 typedef struct Table {
-    char name [MAX_SIZE_NAME];
-    Column *columns;
-    size_t col_count;
-    size_t table_length;
+  char name[MAX_SIZE_NAME];
+  Column *columns;
+  size_t col_count;
+  size_t table_length;
 } Table;
 
 /**
@@ -88,14 +83,15 @@ typedef struct Table {
  * - name: the name of the associated database.
  * - tables: the pointer to the array of tables contained in the db.
  * - tables_size: the size of the array holding table objects
- * - tables_capacity: the amount of pointers that can be held in the currently allocated memory slot
+ * - tables_capacity: the amount of pointers that can be held in the currently
+ *allocated memory slot
  **/
 
 typedef struct Db {
-    char name[MAX_SIZE_NAME]; 
-    Table *tables;
-    size_t tables_size;
-    size_t tables_capacity;
+  char name[MAX_SIZE_NAME];
+  Table *tables;
+  size_t tables_size;
+  size_t tables_capacity;
 } Db;
 
 /**
@@ -110,51 +106,49 @@ typedef enum StatusCode {
 
 // status declares an error code and associated message
 typedef struct Status {
-    StatusCode code;
-    char* error_message;
+  StatusCode code;
+  char *error_message;
 } Status;
 
 // Defines a comparator flag between two values.
 typedef enum ComparatorType {
-    NO_COMPARISON = 0,
-    LESS_THAN = 1,
-    GREATER_THAN = 2,
-    EQUAL = 4,
-    LESS_THAN_OR_EQUAL = 5,
-    GREATER_THAN_OR_EQUAL = 6
+  NO_COMPARISON = 0,
+  LESS_THAN = 1,
+  GREATER_THAN = 2,
+  EQUAL = 4,
+  LESS_THAN_OR_EQUAL = 5,
+  GREATER_THAN_OR_EQUAL = 6
 } ComparatorType;
 
 /*
- * Declares the type of a result column, 
- which includes the number of tuples in the result, the data type of the result, and a pointer to the result data
+ * Declares the type of a result column,
+ which includes the number of tuples in the result, the data type of the result, and
+ a pointer to the result data
  */
 typedef struct Result {
-    size_t num_tuples;
-    DataType data_type;
-    void *payload;
+  size_t num_tuples;
+  DataType data_type;
+  void *payload;
 } Result;
 
 /*
  * an enum which allows us to differentiate between columns and results
  */
-typedef enum GeneralizedColumnType {
-    RESULT,
-    COLUMN
-} GeneralizedColumnType;
+typedef enum GeneralizedColumnType { RESULT, COLUMN } GeneralizedColumnType;
 /*
  * a union type holding either a column or a result struct
  */
 typedef union GeneralizedColumnPointer {
-    Result* result;
-    Column* column;
+  Result *result;
+  Column *column;
 } GeneralizedColumnPointer;
 
 /*
  * unifying type holding either a column or a result
  */
 typedef struct GeneralizedColumn {
-    GeneralizedColumnType column_type;
-    GeneralizedColumnPointer column_pointer;
+  GeneralizedColumnType column_type;
+  GeneralizedColumnPointer column_pointer;
 } GeneralizedColumn;
 
 /*
@@ -162,116 +156,117 @@ typedef struct GeneralizedColumn {
  */
 
 typedef struct GeneralizedColumnHandle {
-    char name[HANDLE_MAX_SIZE];
-    GeneralizedColumn generalized_column;
+  char name[HANDLE_MAX_SIZE];
+  GeneralizedColumn generalized_column;
 } GeneralizedColumnHandle;
 /*
- * holds the information necessary to refer to generalized columns (results or columns)
+ * holds the information necessary to refer to generalized columns (results or
+ * columns)
  */
 typedef struct ClientContext {
-    GeneralizedColumnHandle* chandle_table;
-    int chandles_in_use;
-    int chandle_slots;
+  GeneralizedColumnHandle *chandle_table;
+  int chandles_in_use;
+  int chandle_slots;
 } ClientContext;
 
 /**
  * comparator
- * A comparator defines a comparison operation over a column. 
+ * A comparator defines a comparison operation over a column.
  **/
 typedef struct Comparator {
-    long int p_low; // used in equality and ranges.
-    long int p_high; // used in range compares. 
-    GeneralizedColumn* gen_col;
-    ComparatorType type1;
-    ComparatorType type2;
-    char* handle;
+  long int p_low;   // used in equality and ranges.
+  long int p_high;  // used in range compares.
+  GeneralizedColumn *gen_col;
+  ComparatorType type1;
+  ComparatorType type2;
+  char *handle;
 } Comparator;
 
 /*
  * tells the databaase what type of operator this is
  */
 typedef enum OperatorType {
-    CREATE,
-    INSERT,
-    LOAD,
+  CREATE,
+  INSERT,
+  LOAD,
 } OperatorType;
 
-
 typedef enum CreateType {
-    _DB,
-    _TABLE,
-    _COLUMN,
+  _DB,
+  _TABLE,
+  _COLUMN,
 } CreateType;
 
 /*
  * necessary fields for creation
- * "create_type" indicates what kind of object you are creating. 
- * For example, if create_type == _DB, the operator should create a db named <<name>> 
- * if create_type = _TABLE, the operator should create a table named <<name>> with <<col_count>> columns within db <<db>>
- * if create_type = = _COLUMN, the operator should create a column named <<name>> within table <<table>>
+ * "create_type" indicates what kind of object you are creating.
+ * For example, if create_type == _DB, the operator should create a db named <<name>>
+ * if create_type = _TABLE, the operator should create a table named <<name>> with
+ * <<col_count>> columns within db <<db>> if create_type = = _COLUMN, the operator
+ * should create a column named
+ * <<name>> within table <<table>>
  */
 typedef struct CreateOperator {
-    CreateType create_type; 
-    char name[MAX_SIZE_NAME]; 
-    Db* db;
-    Table* table;
-    int col_count;
+  CreateType create_type;
+  char name[MAX_SIZE_NAME];
+  Db *db;
+  Table *table;
+  int col_count;
 } CreateOperator;
 
 /*
  * necessary fields for insertion
  */
 typedef struct InsertOperator {
-    Table* table;
-    int* values;
+  Table *table;
+  int *values;
 } InsertOperator;
 /*
  * necessary fields for insertion
  */
 typedef struct LoadOperator {
-    char* file_name;
+  char *file_name;
 } LoadOperator;
 /*
  * union type holding the fields of any operator
  */
 typedef union OperatorFields {
-    CreateOperator create_operator;
-    InsertOperator insert_operator;
-    LoadOperator load_operator;
+  CreateOperator create_operator;
+  InsertOperator insert_operator;
+  LoadOperator load_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:
  * type: the type of operator to perform (i.e. insert, select, ...)
  * operator fields: the fields of the operator in question
  * client_fd: the file descriptor of the client that this operator will return to
- * context: the context of the operator in question. This context holds the local results of the client in question.
+ * context: the context of the operator in question. This context holds the local
+ * results of the client in question.
  */
 typedef struct DbOperator {
-    OperatorType type;
-    OperatorFields operator_fields;
-    int client_fd;
-    ClientContext* context;
+  OperatorType type;
+  OperatorFields operator_fields;
+  int client_fd;
+  ClientContext *context;
 } DbOperator;
 
 extern Db *current_db;
 
-/* 
- * Use this command to see if databases that were persisted start up properly. If files
- * don't load as expected, this can return an error. 
+/*
+ * Use this command to see if databases that were persisted start up properly. If
+ * files don't load as expected, this can return an error.
  */
 Status db_startup();
 
-Status create_db(const char* db_name);
+Status create_db(const char *db_name);
 
-Table* create_table(Db* db, const char* name, size_t num_columns, Status *status);
+Table *create_table(Db *db, const char *name, size_t num_columns, Status *status);
 
-Column* create_column(Table *table, char *name, bool sorted, Status *ret_status);
+Column *create_column(Table *table, char *name, bool sorted, Status *ret_status);
 
 Status shutdown_server();
 
-char** execute_db_operator(DbOperator* query);
-void db_operator_free(DbOperator* query);
-
+char **execute_db_operator(DbOperator *query);
+void db_operator_free(DbOperator *query);
 
 #endif /* CS165_H */
-

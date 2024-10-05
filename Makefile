@@ -100,4 +100,7 @@ clean:
 
 # make your own target for your own testing / dev
 
+style:   # auto-format all .c, .h, files with clang-format.
+	git ls-files '*.c' '*.h' | xargs clang-format -i
+
 ###################### End Customization ##########################

@@ -1,12 +1,11 @@
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include "hash_table.h"
 
 // This is where you can implement your own tests for the hash table
-// implementation. 
+// implementation.
 int main(void) {
-
   hashtable *ht = NULL;
   int size = 10;
   allocate(&ht, size);
@@ -18,7 +17,7 @@ int main(void) {
 
   int num_values = 1;
 
-  valType* values = malloc(sizeof(valType));
+  valType *values = malloc(sizeof(valType));
 
   int num_results = 0;
 
