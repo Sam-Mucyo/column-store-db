@@ -1,6 +1,17 @@
+# Mac Environment
+.DS_Store
+*.vscode
+
+# Outputs
+infra_outputs
+staff_test
 student_outputs
 generated_data
 
+# Docs
+html/
+latex/
+Doxyfile
 # Object files
 obj/*
 *.o
