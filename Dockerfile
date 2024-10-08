@@ -31,7 +31,7 @@ RUN bash -c 'apt-get update && apt-get install -y \
     build-essential \
     gcc \
     curl \
-#    sse4.2-support \
+    #    sse4.2-support \
     psmisc \
     python3.9 \
     python3.9-distutils \
@@ -66,6 +66,27 @@ RUN bash -c 'apt-get install -y linux-tools-common linux-tools-generic && \
 
 # RUN apt-get install emacs
 
+# include manual pages and documentation
+ARG DEBIAN_FRONTEND=noninteractive
+RUN bash -c 'apt-get update &&\
+    yes | unminimize'
+
+# Install GCC-related packages
+# gdb-doc         : Documentation for GDB, providing guidance on how to effectively use the debugger.
+# libc6-dev       : Development files for the GNU C Library, providing the standard C library needed for sys-level functions.
+# libreadline-dev : Provides the Readline library, used by tools like GDB to allow for interactive command line editing.
+# man             : for man pages
+# bat             : better `cat` alternative
+# less            : to navigate longer `cat` with vim keybinds; like `man` outputs
+RUN bash -c 'apt-get -y install \
+    gdb-doc \
+    libc6-dev \
+    libreadline-dev\
+    clang \
+    man \
+    bat \
+    less \
+    sudo'
 
 # define any environmental variables you need?
 # ENV MYLABEL helloworld
@@ -76,5 +97,6 @@ RUN bash -c 'apt-get install -y linux-tools-common linux-tools-generic && \
 # tmux is a nice window multiplexer / manager within a single terminal
 # for a quick rundown of tmux window management shortcuts:
 #   https://tmuxcheatsheet.com/
-CMD cd src
-CMD make clean && make all && /bin/bash && tmux
+# CMD cd src
+# CMD make clean && make all && /bin/bash && tmux
+CMD /bin/bash
