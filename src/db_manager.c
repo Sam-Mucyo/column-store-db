@@ -31,6 +31,17 @@ Status create_db(const char *db_name) {
   return ret_status;
 }
 
+Column *create_column(Table *table, char *name, bool sorted, Status *ret_status) {
+  // void pattern for 'using' a variable to prevent compiler unused variable
+  // warning
+  (void)(table);
+  (void)(name);
+  (void)(sorted);
+
+  ret_status->code = OK;
+  return NULL;
+}
+
 /**
  * @brief free the memory allocated for a db operator
  */

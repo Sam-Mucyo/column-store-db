@@ -35,10 +35,72 @@ char *next_token(char **tokenizer, message_status *status) {
 }
 
 /**
- * This method takes in a string representing the arguments to create a table.
- * It parses those arguments, checks that they are valid, and creates a table.
- **/
+ * @brief parse_create_column
+ * This method takes in a string representing the arguments to create a column, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ * Example original query:
+ *      - create(col,"col1",db1.tbl1)
+ *      - create(col,"col2",db1.tbl1)
+ *
+ * @param create_arguments the string representing the arguments to create a column
+ * @return DbOperator*
+ */
+DbOperator *parse_create_column(char *create_arguments) {
+  message_status status = OK_DONE;
+  char **create_arguments_index = &create_arguments;
+  char *column_name = next_token(create_arguments_index, &status);
+  char *db_and_table_name = next_token(create_arguments_index, &status);
 
+  // not enough arguments
+  if (status == INCORRECT_FORMAT) {
+    log_err("L%d: parse_create_column failed. Not enough arguments\n", __LINE__);
+    return NULL;
+  }
+
+  // split db and table name
+  char *db_name = strsep(&db_and_table_name, ".");
+  char *table_name = db_and_table_name;
+
+  // last character should be a ')', replace it with a null-terminating character
+  int last_char = strlen(table_name) - 1;
+  if (table_name[last_char] != ')') {
+    log_err("L%d: parse_create_column failed. Bad table name\n", __LINE__);
+    return NULL;
+  }
+  table_name[last_char] = '\0';
+  // Get the column name free of quotation marks
+  column_name = trim_quotes(column_name);
+  // check that the database argument is the current active database
+  if (!current_db || strcmp(current_db->name, db_name) != 0) {
+    log_err("L%d: parse_create_column failed. Bad db name\n", __LINE__);
+    return NULL;
+  }
+  // check that the table argument is in the current active database
+  Table *table = lookup_table(table_name);
+  if (!table) {
+    log_err("L%d: parse_create_column failed. Bad table name\n", __LINE__);
+    return NULL;
+  }
+  // make create dbo for column
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  dbo->type = CREATE;
+  dbo->operator_fields.create_operator.create_type = _COLUMN;
+  strcpy(dbo->operator_fields.create_operator.name, column_name);
+  dbo->operator_fields.create_operator.db = current_db;
+  dbo->operator_fields.create_operator.table = table;
+  return dbo;
+}
+
+/**
+ * @brief parse_create_tbl
+ * This method takes in a string representing the arguments to create a table, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ * Example original query:
+ *     - create(tbl,"tbl1",db1,3)
+ *
+ * @param create_arguments
+ * @return DbOperator*
+ */
 DbOperator *parse_create_tbl(char *create_arguments) {
   message_status status = OK_DONE;
   char **create_arguments_index = &create_arguments;
@@ -80,10 +142,15 @@ DbOperator *parse_create_tbl(char *create_arguments) {
 }
 
 /**
- * This method takes in a string representing the arguments to create a database.
- * It parses those arguments, checks that they are valid, and creates a database.
- **/
-
+ * @brief parse_create_db
+ * This method takes in a string representing the arguments to create a database, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ * Example original query:
+ *     - create(db,"db1")
+ *
+ * @param create_arguments
+ * @return DbOperator*
+ */
 DbOperator *parse_create_db(char *create_arguments) {
   char *token;
   token = strsep(&create_arguments, ",");
@@ -140,6 +207,8 @@ DbOperator *parse_create(char *create_arguments) {
         dbo = parse_create_db(tokenizer_copy);
       } else if (strcmp(token, "tbl") == 0) {
         dbo = parse_create_tbl(tokenizer_copy);
+      } else if (strcmp(token, "col") == 0) {
+        dbo = parse_create_column(tokenizer_copy);
       } else {
         mes_status = UNKNOWN_COMMAND;
       }
@@ -152,10 +221,17 @@ DbOperator *parse_create(char *create_arguments) {
 }
 
 /**
- * parse_insert reads in the arguments for a create statement and
- * then passes these arguments to a database function to insert a row.
- **/
-
+ * @brief parse_insert
+ * Takes in a string representing the arguments to insert into a table, parses them, and
+ * returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ *
+ * Example original query:
+ *    - relational_insert(db1.tbl2,-1,-11,-111,-1111)  --- if db1.tbl2 has 4 columns
+ *
+ * @param query_command
+ * @param send_message
+ * @return DbOperator*
+ */
 DbOperator *parse_insert(char *query_command, message *send_message) {
   unsigned int columns_inserted = 0;
   char *token = NULL;
@@ -201,16 +277,17 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
 }
 
 /**
- * parse_command takes as input the send_message from the client and then
- * parses it into the appropriate query. Stores into send_message the
- * status to send back.
- * Returns a db_operator.
+ * @brief parse_command
+ * This method takes in a string representing the initial raw input from the client,
+ * uses the first word to determine its category: create, insert, select, fetch, etc.
+ * and then passes the arguments to the appropriate parsing function.
  *
- * Getting Started Hint:
- *      What commands are currently supported for parsing in the starter code
- *distribution? How would you add a new command type to parse? What if such command
- *requires multiple arguments?
- **/
+ * @param query_command
+ * @param send_message
+ * @param client_socket
+ * @param context
+ * @return DbOperator*
+ */
 DbOperator *parse_command(char *query_command, message *send_message, int client_socket,
                           ClientContext *context) {
   // a second option is to malloc the dbo here (instead of inside the parse
