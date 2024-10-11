@@ -10,7 +10,7 @@
  * @return char*
  */
 char *execute_DbOperator(DbOperator *query) {
-  char *res_msg;
+  char *res_msg = "Unsurpported query.";
   if (!query) {
     cs165_log(stdout, "query executor received a null query.\n");
     return "Unsurpported query.";
@@ -39,7 +39,6 @@ char *execute_DbOperator(DbOperator *query) {
       cs165_log(stdout, "query was correctly parsed, but not handled by Executor.\n");
       break;
   }
-  res_msg = "Unsurpported query.";
   db_operator_free(query);
   return res_msg;
 }
