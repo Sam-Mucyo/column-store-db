@@ -266,7 +266,6 @@ Column *create_column(Table *table, char *name, bool sorted, Status *ret_status)
 
 Status shutdown_server();
 
-char **execute_db_operator(DbOperator *query);
 void db_operator_free(DbOperator *query);
 
 #endif /* CS165_H */

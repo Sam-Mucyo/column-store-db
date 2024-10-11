@@ -26,55 +26,10 @@
 #include "cs165_api.h"
 #include "message.h"
 #include "parse.h"
+#include "query_handler.h"
 #include "utils.h"
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024
-
-/** execute_DbOperator takes as input the DbOperator and executes the query.
- * This should be replaced in your implementation (and its implementation
- *possibly moved to a different file). It is currently here so that you can
- *verify that your server and client can send messages.
- *
- * Getting started hints:
- *      What are the structural attributes of a `query`?
- *      How will you interpret different queries?
- *      How will you ensure different queries invoke different execution paths
- *in your code?
- **/
-char *execute_DbOperator(DbOperator *query) {
-  char *res_msg;
-  if (!query) {
-    cs165_log(stdout, "query executor received a null query.\n");
-    return "Unsurpported query.";
-  }
-  switch (query->type) {
-    case CREATE:
-      if (query->operator_fields.create_operator.create_type == _DB) {
-        if (create_db(query->operator_fields.create_operator.name).code == OK) {
-          res_msg = "Database created.";
-        } else {
-          res_msg = "Database creation failed.";
-        }
-      } else if (query->operator_fields.create_operator.create_type == _TABLE) {
-        Status create_status;
-        create_table(query->operator_fields.create_operator.db,
-                     query->operator_fields.create_operator.name,
-                     query->operator_fields.create_operator.col_count, &create_status);
-        if (create_status.code != OK) {
-          cs165_log(stdout, "adding a table failed.\n");
-          res_msg = "Table creation failed.";
-        }
-        res_msg = "Table created.";
-      }
-      break;
-    default:
-      cs165_log(stdout, "query was correctly parsed, but not handled by Executor.\n");
-      res_msg = "Unsurpported query.";
-      break;
-  }
-  db_operator_free(query);
-  return res_msg;
-}
 
 /**
  * handle_client(client_socket)
