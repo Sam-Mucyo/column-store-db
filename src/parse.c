@@ -277,6 +277,56 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
 }
 
 /**
+ * @brief parse_select
+ * This method takes in a string representing the arguments to select from a table, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ *
+ * Example query (without a handle):
+ *     - select(db1.tbl1.col1,null,20)   --- select all values strictly less than 20
+ *     - select(db1.tbl1.col1,20,40)     --- select all values between 20 (incl.) and 40
+ *
+ * @param query_command
+ * @return DbOperator*
+ */
+DbOperator *parse_select(char *query_command) {
+  log_info("L%d: TODO: parse_select received: %s\n", __LINE__, query_command);
+  return NULL;
+}
+
+/**
+ * @brief parse_fetch
+ * This method takes in a string representing the arguments to fetch from a column, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ *
+ * Example query (without a handle):
+ *     - fetch(db1.tbl1.col2,s1)           --- where s1 is a handle to the result of a
+ *                                              select query
+ * @param query_command
+ * @return DbOperator*
+ */
+DbOperator *parse_fetch(char *query_command) {
+  log_info("L%d: TODO: parse_fetch received: %s\n", __LINE__, query_command);
+  return NULL;
+}
+
+/**
+ * @brief parse_avg
+ * This method takes in a string representing the arguments to average a column, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ *
+ * Example query (without a handle):
+ *     - avg(f1)           --- where f1 is a handle to the result of a fetch query
+ *
+ * @param query_command
+ * @return DbOperator*
+ */
+DbOperator *parse_avg(char *query_command) {
+  log_info("L%d: TODO: parse_avg received: %s\n", __LINE__, query_command);
+  (void)query_command;
+  return NULL;
+}
+
+/**
  * @brief parse_command
  * This method takes in a string representing the initial raw input from the client,
  * uses the first word to determine its category: create, insert, select, fetch, etc.
@@ -331,6 +381,17 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
   } else if (strncmp(query_command, "relational_insert", 17) == 0) {
     query_command += 17;
     dbo = parse_insert(query_command, send_message);
+  } else if (strncmp(query_command, "select", 6) == 0) {
+    query_command += 6;
+    dbo = parse_select(query_command);
+  } else if (strncmp(query_command, "fetch", 5) == 0) {
+    query_command += 5;
+    dbo = parse_fetch(query_command);
+  } else if (strncmp(query_command, "avg", 3) == 0) {
+    query_command += 3;
+    dbo = parse_avg(query_command);
+  } else {
+    send_message->status = UNKNOWN_COMMAND;
   }
   if (dbo == NULL) {
     return dbo;

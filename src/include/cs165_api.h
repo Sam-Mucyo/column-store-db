@@ -189,6 +189,10 @@ typedef enum OperatorType {
   CREATE,
   INSERT,
   LOAD,
+  SELECT,
+  FETCH,
+  AVG,
+  SHUTDOWN,
 } OperatorType;
 
 typedef enum CreateType {
@@ -227,6 +231,19 @@ typedef struct InsertOperator {
 typedef struct LoadOperator {
   char *file_name;
 } LoadOperator;
+
+typedef struct SelectOperator {
+  Comparator *comparator;
+} SelectOperator;
+
+typedef struct FetchOperator {
+  GeneralizedColumnHandle *chandle;
+} FetchOperator;
+
+typedef struct AvgOperator {
+  GeneralizedColumn *gen_col;
+} AvgOperator;
+
 /*
  * union type holding the fields of any operator
  */
@@ -234,6 +251,9 @@ typedef union OperatorFields {
   CreateOperator create_operator;
   InsertOperator insert_operator;
   LoadOperator load_operator;
+  SelectOperator select_operator;
+  FetchOperator fetch_operator;
+  AvgOperator avg_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:
