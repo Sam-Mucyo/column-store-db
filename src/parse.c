@@ -120,7 +120,7 @@ DbOperator *parse_create_db(char *create_arguments) {
  *to the next function
  **/
 DbOperator *parse_create(char *create_arguments) {
-  message_status mes_status;
+  message_status mes_status = OK_DONE;
   DbOperator *dbo = NULL;
   char *tokenizer_copy, *to_free;
   // Since strsep destroys input, we create a copy of our input.
@@ -189,6 +189,7 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
     // check that we received the correct number of input values
     if (columns_inserted != insert_table->col_count) {
       send_message->status = INCORRECT_FORMAT;
+      free(dbo->operator_fields.insert_operator.values);
       free(dbo);
       return NULL;
     }
