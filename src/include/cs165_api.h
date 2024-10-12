@@ -278,7 +278,7 @@ extern Db *current_db;
  */
 Status db_startup();
 
-Status shutdown_server();
+Status shutdown_db();
 
 void db_operator_free(DbOperator *query);
 

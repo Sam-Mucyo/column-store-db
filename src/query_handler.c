@@ -17,6 +17,10 @@ char *execute_DbOperator(DbOperator *query) {
     return "Unsurpported query.";
   }
   switch (query->type) {
+    case SHUTDOWN:
+      shutdown_db();
+      res_msg = "Db shutdown.";
+      break;
     case CREATE:
       if (query->operator_fields.create_operator.create_type == _DB) {
         if (create_db(query->operator_fields.create_operator.name).code == OK) {

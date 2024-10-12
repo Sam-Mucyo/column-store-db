@@ -373,7 +373,8 @@ DbOperator *parse_avg(char *query_command) {
  * @param send_message
  * @param client_socket
  * @param context
- * @return DbOperator*
+ * @return DbOperator* the database operator to be executed. NULL if the command is not
+ * recognized.
  */
 DbOperator *parse_command(char *query_command, message *send_message, int client_socket,
                           ClientContext *context) {
@@ -427,6 +428,10 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
   } else if (strncmp(query_command, "avg", 3) == 0) {
     query_command += 3;
     dbo = parse_avg(query_command);
+  } else if (strncmp(query_command, "shutdown", 8) == 0) {
+    dbo = malloc(sizeof(DbOperator));
+    dbo->type = SHUTDOWN;
+    send_message->status = SERVER_SHUTDOWN;
   } else {
     send_message->status = UNKNOWN_COMMAND;
   }

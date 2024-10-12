@@ -76,13 +76,14 @@ void handle_client(int client_socket) {
 
       // 2. Handle request
       //    Corresponding database operator is executed over the query
+      // TODO: Make the `execute_DbOperator` return a `message` struct, the status depends
+      // on the query
       char *result = execute_DbOperator(query);
 
       send_message.length = strlen(result);
       char send_buffer[send_message.length + 1];
       strcpy(send_buffer, result);
       send_message.payload = send_buffer;
-      send_message.status = OK_WAIT_FOR_RESPONSE;
 
       // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
       if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {

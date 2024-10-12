@@ -1,7 +1,13 @@
 #include "catalog_manager.h"
 
+#include <string.h>    // For strncpy
+#include <sys/stat.h>  // For mkdir
+#include <sys/types.h>
+
 #include "common.h"
 #include "utils.h"
+
+FILE *db_metadata_file = NULL;  // Declare the metadata file pointer
 
 Status init_catalog_manager(const char *db_name) {
   (void)db_name;
@@ -10,9 +16,43 @@ Status init_catalog_manager(const char *db_name) {
 }
 
 Status create_db(const char *db_name) {
-  (void)db_name;
-  cs165_log(stdout, "Creating database %s\n", db_name);
-  return (Status){OK, "TODO: Implement create_database"};
+  // cheak if the db name is valid
+  if (strlen(db_name) > MAX_SIZE_NAME) {
+    log_err("create_db: Database name is too long\n");
+    return (Status){ERROR, "Database name is too long"};
+  }
+  // check if db name directory already exists
+  struct stat st = {0};
+  if (stat(db_name, &st) == 0) {
+    log_err("create_db: Database directory already exists\n");
+    return (Status){ERROR, "Database directory already exists"};
+  }
+
+  if (mkdir(db_name, 0777) == -1) {
+    log_err("create_db: Failed to create %s database\n", db_name);
+    return (Status){ERROR, "Failed to create %s database"};
+  }
+
+  char metadata_path[MAX_PATH_LEN];
+  snprintf(metadata_path, MAX_PATH_LEN, "%s/.dbmetadata", db_name);
+
+  // Open the metadata file and keep it open for future operations
+  db_metadata_file = fopen(metadata_path, "wb+");
+  if (!db_metadata_file) {
+    log_err("create_db: Failed to create database metadata file\n");
+    return (Status){ERROR, "Failed to create database metadata file"};
+  }
+
+  DatabaseMetadata new_db = {0};
+  strncpy(new_db.name, db_name, MAX_SIZE_NAME);
+  fwrite(&new_db, sizeof(DatabaseMetadata), 1, db_metadata_file);
+
+  // NOTE: we are leaving flush to the shutdown function for performance reasons
+  // This comes with a risk of data loss if the program crashes before the data is written
+  // to disk or the client does not call the shutdown function (Risk to double check)
+  //   fflush(db_metadata_file);  // Ensure the data is written immediately
+
+  return (Status){OK, "Database created and metadata file kept open"};
 }
 
 Table *create_table(Db *db, const char *name, size_t num_columns, Status *ret_status) {
@@ -61,8 +101,32 @@ Status load_data(const char *table_name, const char *column_name, const void *da
   return (Status){OK, NULL};
 }
 
+void update_dbmetadata(DatabaseMetadata *updated_db) {
+  if (db_metadata_file) {
+    fseek(db_metadata_file, 0, SEEK_SET);  // Go to the start of the file
+    size_t written = fwrite(updated_db, sizeof(DatabaseMetadata), 1, db_metadata_file);
+    if (written != 1) {
+      fprintf(stderr, "Error writing database metadata to file.\n");
+      return;
+    }
+
+    // NOTE: same as above in create_db: leaving flush to the shutdown function for
+    // performance (Risk to double check)
+    // fflush(db_metadata_file); // Ensure the data is written immediately
+  }
+}
+
 Status shutdown_catalog_manager(void) {
   cs165_log(stdout, "Shutting down catalog manager\n");
-  log_info("TODO: Implement shutdown_catalog_manager\n");
-  return (Status){OK, NULL};
+  if (db_metadata_file) {
+    // Flush any remaining data in the buffer to the disk
+    fflush(db_metadata_file);
+
+    // Close the metadata file
+    fclose(db_metadata_file);
+    db_metadata_file = NULL;  // Clear the pointer to indicate it's closed
+    return (Status){OK, "Catalog manager: db metadata file closed"};
+  }
+  log_err("L%d: shudown_catalog_manager: db metadata file was not open\n", __LINE__);
+  return (Status){ERROR, "Db Metadata file was not open"};
 }
