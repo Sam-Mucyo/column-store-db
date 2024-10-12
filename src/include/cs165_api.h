@@ -278,12 +278,6 @@ extern Db *current_db;
  */
 Status db_startup();
 
-Status create_db(const char *db_name);
-
-Table *create_table(Db *db, const char *name, size_t num_columns, Status *status);
-
-Column *create_column(Table *table, char *name, bool sorted, Status *ret_status);
-
 Status shutdown_server();
 
 void db_operator_free(DbOperator *query);

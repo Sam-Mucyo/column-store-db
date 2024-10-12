@@ -10,14 +10,17 @@
 #include "parse.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "catalog_manager.h"
 #include "client_context.h"
 #include "cs165_api.h"
 #include "utils.h"
+#include "variable_pool.h"
 
 /**
  * Takes a pointer to a string.
@@ -289,8 +292,42 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
  * @return DbOperator*
  */
 DbOperator *parse_select(char *query_command) {
-  log_info("L%d: TODO: parse_select received: %s\n", __LINE__, query_command);
-  return NULL;
+  message_status status = OK_DONE;
+  char **command_index = &query_command;
+
+  char *db_tbl_col_name = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) return NULL;
+
+  char *low_str = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) {
+    return NULL;
+  }
+  long low_val = (strcmp(low_str, "null") == 0) ? LONG_MIN : atol(low_str);
+
+  char *high_str = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) return NULL;
+  long high_val = (strcmp(high_str, "null") == 0) ? LONG_MAX : atol(high_str);
+
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  dbo->type = SELECT;
+  dbo->operator_fields.select_operator.comparator = malloc(sizeof(Comparator));
+  dbo->operator_fields.select_operator.comparator->p_low = low_val;
+  dbo->operator_fields.select_operator.comparator->p_high = high_val;
+
+  // Try getting column from catalog manager
+  cs165_log(stdout, "parse_select: getting column %s from catalog\n", db_tbl_col_name);
+  Column *col = get_column_from_catalog(db_tbl_col_name);
+  if (!col) {
+    db_operator_free(dbo);
+    return NULL;
+  }
+
+  GeneralizedColumn *gen_col = malloc(sizeof(GeneralizedColumn));
+  gen_col->column_type = COLUMN;
+  gen_col->column_pointer.column = col;
+  dbo->operator_fields.select_operator.comparator->gen_col = gen_col;
+
+  return dbo;
 }
 
 /**

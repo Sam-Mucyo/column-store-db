@@ -1,5 +1,6 @@
 #include "query_handler.h"
 
+#include "catalog_manager.h"
 #include "utils.h"
 
 /**
