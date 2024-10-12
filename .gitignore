@@ -12,6 +12,9 @@ generated_data
 html/
 latex/
 Doxyfile
+docs/colDbDesign.drawio - draw.io_files/
+docs/colDbDesign.drawio\ -\ draw.io.html
+
 # Object files
 obj/*
 *.o
