@@ -61,14 +61,55 @@ Status create_db(const char *db_name) {
   return (Status){OK, "Database created and current_db initialized"};
 }
 
-Table *create_table(Db *db, const char *name, size_t num_columns, Status *ret_status) {
-  (void)db;
-  (void)name;
-  (void)num_columns;
-  (void)ret_status;
-  cs165_log(stdout, "Creating table %s with %zu columns\n", name, num_columns);
-  log_info("TODO: Implement create_table\n");
-  return NULL;
+Table *create_table(Db *db, const char *name, size_t num_columns, Status *status) {
+  cs165_log(stdout, "Creating table %s in database %s\n", name, db->name);
+
+  // NOTE: Maybe we should check if the table already exists in the database
+  if (strlen(name) >= MAX_SIZE_NAME || num_columns <= 0) {
+    *status = (Status){ERROR, "Invalid table name or number of columns"};
+    return NULL;
+  }
+
+  // Create the table directory
+  char table_path[MAX_PATH_LEN];
+  snprintf(table_path, MAX_PATH_LEN, "%s/%s/%s", STORAGE_PATH, db->name, name);
+  if (create_directory(table_path) != 0) {
+    log_err("create_table: Failed to create table directory\n");
+    *status = (Status){ERROR, "Failed to create table directory"};
+    return NULL;
+  }
+
+  // Check if we need to resize the tables array
+  if (db->tables_size >= db->tables_capacity) {
+    cs165_log(stdout, "Resizing tables array curr capacity: %zu\n", db->tables_capacity);
+    size_t new_capacity = db->tables_capacity == 0 ? 1 : db->tables_capacity * 2;
+    Table *new_tables = realloc(db->tables, new_capacity * sizeof(Table));
+    if (!new_tables) {
+      *status = (Status){ERROR, "Failed to resize tables array"};
+      return NULL;
+    }
+    db->tables = new_tables;
+    db->tables_capacity = new_capacity;
+  }
+
+  // Initialize the new table
+  Table *new_table = &db->tables[db->tables_size];
+  strncpy(new_table->name, name, MAX_SIZE_NAME);
+  new_table->columns = calloc(num_columns, sizeof(Column));
+  if (!new_table->columns) {
+    log_err("create_table: Failed to allocate memory for requested %zu columns\n",
+            num_columns);
+    *status = (Status){ERROR, "Memory allocation failed for columns"};
+    return NULL;
+  }
+
+  new_table->col_count = num_columns;
+  new_table->table_length = 0;
+
+  db->tables_size++;
+  log_info("Table %s created successfully\n", name);
+  *status = (Status){OK, "Table created successfully"};
+  return new_table;
 }
 
 Column *create_column(Table *table, char *name, bool sorted, Status *ret_status) {
