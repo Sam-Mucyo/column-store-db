@@ -24,7 +24,6 @@ not compile on the lab machine please look into this as a a source of error. */
 #include <unistd.h>
 
 #include "common.h"
-#include "message.h"
 #include "utils.h"
 
 #define DEFAULT_STDIN_BUFFER_SIZE 1024
@@ -36,7 +35,7 @@ not compile on the lab machine please look into this as a a source of error. */
  * Returns a valid client socket fd on success, else -1 on failure.
  *
  **/
-int connect_client() {
+int connect_client(void) {
   int client_socket;
   size_t len;
   struct sockaddr_un remote;
@@ -52,7 +51,7 @@ int connect_client() {
   strncpy(remote.sun_path, SOCK_PATH, strlen(SOCK_PATH) + 1);
   len = strlen(remote.sun_path) + sizeof(remote.sun_family) + 1;
   if (connect(client_socket, (struct sockaddr *)&remote, len) == -1) {
-    log_err("client connect failed: ");
+    log_err("client connect fclailed: ");
     return -1;
   }
 

@@ -18,7 +18,7 @@ char *execute_DbOperator(DbOperator *query) {
   }
   switch (query->type) {
     case SHUTDOWN:
-      shutdown_db();
+      db_shutdown();
       res_msg = "Db shutdown.";
       break;
     case CREATE:

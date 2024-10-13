@@ -18,9 +18,7 @@
 
 #include "catalog_manager.h"
 #include "client_context.h"
-#include "cs165_api.h"
 #include "utils.h"
-#include "variable_pool.h"
 
 /**
  * Takes a pointer to a string.

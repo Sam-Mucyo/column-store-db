@@ -1,5 +1,24 @@
+/*
+Copyright (c) 2015 Harvard University - Data Systems Laboratory (DASLab)
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+*/
+
 /** server.c
- * CS165 Fall 2018
+ * CS165 Fall 2024
  *
  * This file provides a basic unix socket implementation for a server
  * used in an interactive client-server database.
@@ -23,8 +42,6 @@
 
 #include "client_context.h"
 #include "common.h"
-#include "cs165_api.h"
-#include "message.h"
 #include "parse.h"
 #include "query_handler.h"
 #include "utils.h"
@@ -109,7 +126,7 @@ void handle_client(int client_socket) {
  * This sets up the connection on the server side using unix sockets.
  * Returns a valid server socket fd on success, else -1 on failure.
  **/
-int setup_server() {
+int setup_server(void) {
   int server_socket;
   size_t len;
   struct sockaddr_un local;

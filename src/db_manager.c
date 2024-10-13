@@ -1,11 +1,11 @@
 #include "catalog_manager.h"
-#include "cs165_api.h"
+#include "operators.h"
 #include "utils.h"
 
 // In this class, there will always be only one active database at a time
 Db *current_db;
 
-Status shutdown_db() {
+Status db_shutdown(void) {
   shutdown_catalog_manager();
   cs165_log(stdout, "Shutdown server\n");
   return (Status){OK, NULL};

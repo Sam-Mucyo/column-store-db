@@ -1,33 +1,11 @@
 #ifndef CATALOG_MANAGER_H
 #define CATALOG_MANAGER_H
 
+#include <stdbool.h>
 #include <sys/mman.h>
 
-#include "cs165_api.h"
-
-#define MAX_PATH_LEN 256
-
-typedef struct {
-  char name[MAX_SIZE_NAME];
-  size_t num_elements;
-  DataType data_type;
-  void *mmap_ptr;
-  size_t mmap_size;
-  long min_value;
-  long max_value;
-} ColumnMetadata;
-
-typedef struct {
-  char name[MAX_SIZE_NAME];
-  size_t num_columns;
-  ColumnMetadata *columns;
-} TableMetadata;
-
-typedef struct {
-  char name[MAX_SIZE_NAME];
-  size_t num_tables;
-  TableMetadata *tables;
-} DatabaseMetadata;
+#include "common.h"
+#include "db.h"
 
 // Initialize the catalog manager
 Status init_catalog_manager(const char *db_name);
@@ -74,6 +52,6 @@ Status load_data(const char *table_name, const char *column_name, const void *da
                  size_t num_elements);
 
 // Shutdown the catalog manager
-Status shutdown_catalog_manager();
+Status shutdown_catalog_manager(void);
 
 #endif  // CATALOG_MANAGER_H
