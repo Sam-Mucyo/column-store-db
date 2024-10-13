@@ -5,6 +5,12 @@
 // In this class, there will always be only one active database at a time
 Db *current_db;
 
+Status db_startup(void) {
+  cs165_log(stdout, "Startup server\n");
+  init_db_from_disk();
+  return (Status){OK, NULL};
+}
+
 Status db_shutdown(void) {
   shutdown_catalog_manager();
   cs165_log(stdout, "Shutdown server\n");

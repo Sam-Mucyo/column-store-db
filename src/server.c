@@ -163,6 +163,9 @@ int setup_server(void) {
     return -1;
   }
 
+  // after all setup, setup db. TODO: check implications of this on concurrent clients
+  db_startup();
+
   return server_socket;
 }
 

@@ -12,6 +12,7 @@
 #define MAX_SIZE_NAME 64
 #define HANDLE_MAX_SIZE 64
 #define MAX_PATH_LEN 256
+#define STORAGE_PATH "disk"
 
 /**
  * DataType

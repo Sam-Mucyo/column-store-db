@@ -7,8 +7,7 @@
 #include "common.h"
 #include "db.h"
 
-// Initialize the catalog manager
-Status init_catalog_manager(const char *db_name);
+Status init_db_from_disk(void);
 
 // Create a new database
 Status create_db(const char *db_name);
