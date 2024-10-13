@@ -2,6 +2,9 @@
 .DS_Store
 *.vscode
 
+#DB Storage file 
+src/disk/
+
 # Outputs
 infra_outputs
 staff_test
