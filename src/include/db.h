@@ -16,41 +16,14 @@ typedef struct Result {
   void *payload;
 } Result;
 
-typedef struct {
-  char name[MAX_SIZE_NAME];
-  size_t num_elements;
-  DataType data_type;
-  void *mmap_ptr;
-  size_t mmap_size;
-  long min_value;
-  long max_value;
-} ColumnMetadata;
-
-typedef struct {
-  char name[MAX_SIZE_NAME];
-  size_t num_columns;
-  ColumnMetadata *columns;
-} TableMetadata;
-
-typedef struct {
-  char name[MAX_SIZE_NAME];
-  size_t num_tables;
-  TableMetadata *tables;
-} DatabaseMetadata;
-
-// struct ColumnIndex;
-
-// TODO: struct alignment: consier metadata's (or most of its) data in contiguous memory
-// blocks (such as column metadata) to improve cache performance
 typedef struct Column {
   char name[MAX_SIZE_NAME];
   int *data;
-  // You will implement column indexes later.
-  void *index;
-  // struct ColumnIndex *index;
-  // bool clustered;
-  // bool sorted;
-  ColumnMetadata *metadata;
+  //   void *index;
+  size_t num_elements;
+  long min_value;
+  long max_value;
+  size_t mmap_size;
 } Column;
 
 /**
@@ -72,7 +45,6 @@ typedef struct Table {
   Column *columns;
   size_t col_count;
   size_t table_length;
-  TableMetadata *metadata;
 } Table;
 
 /**
@@ -90,7 +62,6 @@ typedef struct Db {
   Table *tables;
   size_t tables_size;
   size_t tables_capacity;
-  DatabaseMetadata *metadata;
 } Db;
 
 extern Db *current_db;
