@@ -58,6 +58,7 @@ Status create_db(const char *db_name) {
   current_db->tables = NULL;
   current_db->tables_size = 0;
   current_db->tables_capacity = 0;
+  log_info("Database %s created successfully\n", db_name);
   return (Status){OK, "Database created and current_db initialized"};
 }
 
@@ -103,8 +104,8 @@ Table *create_table(Db *db, const char *name, size_t num_columns, Status *status
     return NULL;
   }
 
-  new_table->col_count = num_columns;
-  new_table->table_length = 0;
+  new_table->col_capacity = num_columns;
+  new_table->num_cols = 0;
 
   db->tables_size++;
   log_info("Table %s created successfully\n", name);
@@ -113,13 +114,35 @@ Table *create_table(Db *db, const char *name, size_t num_columns, Status *status
 }
 
 Column *create_column(Table *table, char *name, bool sorted, Status *ret_status) {
-  (void)table;
-  (void)name;
   (void)sorted;
-  (void)ret_status;
   cs165_log(stdout, "Creating column %s in table %s\n", name, table->name);
-  log_info("TODO: Implement create_column\n");
-  return NULL;
+
+  if (strlen(name) >= MAX_SIZE_NAME) {
+    log_err("create_column: Column name is too long\n");
+    *ret_status = (Status){ERROR, "Column name is too long"};
+    return NULL;
+  }
+
+  // Check if we need to resize the columns array
+  if (table->num_cols >= table->col_capacity) {
+    log_err("create_column: Table %s is full\n", table->name);
+    *ret_status = (Status){ERROR, "Table is full"};
+    return NULL;
+  }
+
+  // Initialize the new column
+  Column *new_column = &table->columns[table->num_cols];
+  strncpy(new_column->name, name, MAX_SIZE_NAME);
+  new_column->data = NULL;
+  new_column->num_elements = 0;
+  new_column->min_value = 0;
+  new_column->max_value = 0;
+  new_column->mmap_size = 0;
+
+  table->num_cols++;
+  log_info("Column %s created successfully\n", name);
+  *ret_status = (Status){OK, "Column created successfully"};
+  return new_column;
 }
 
 Column *get_column_from_catalog(const char *db_tbl_col_name) {
@@ -130,9 +153,20 @@ Column *get_column_from_catalog(const char *db_tbl_col_name) {
 }
 
 Table *get_table_from_catalog(const char *table_name) {
-  (void)table_name;
-  cs165_log(stdout, "catalog_manager: Get table %s\n", table_name);
-  log_info("TODO: Implement get_table_from_catalog\n");
+  // Ensure the current database is set
+  if (current_db == NULL) {
+    log_err("get_table_from_catalog: No database loaded");
+    return NULL;
+  }
+
+  // Search for the table within the current database
+  for (size_t i = 0; i < current_db->tables_size; i++) {
+    if (strcmp(current_db->tables[i].name, table_name) == 0) {
+      return &current_db->tables[i];
+    }
+  }
+
+  log_err("get_table_from_catalog: Table not found");
   return NULL;
 }
 

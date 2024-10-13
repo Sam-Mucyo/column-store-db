@@ -40,6 +40,15 @@ char *execute_DbOperator(DbOperator *query) {
         } else {
           res_msg = "Table created.";
         }
+      } else if (query->operator_fields.create_operator.create_type == _COLUMN) {
+        Status status;
+        create_column(query->operator_fields.create_operator.table,
+                      query->operator_fields.create_operator.name, false, &status);
+        if (status.code == OK) {
+          res_msg = "Column created.";
+        } else {
+          res_msg = "Column creation failed.";
+        }
       }
       break;
     default:

@@ -65,7 +65,7 @@ DbOperator *parse_create_column(char *create_arguments) {
   // last character should be a ')', replace it with a null-terminating character
   int last_char = strlen(table_name) - 1;
   if (table_name[last_char] != ')') {
-    log_err("L%d: parse_create_column failed. Bad table name\n", __LINE__);
+    log_err("L%d: parse_create_column failed. incorrect format\n", __LINE__);
     return NULL;
   }
   table_name[last_char] = '\0';
@@ -77,7 +77,7 @@ DbOperator *parse_create_column(char *create_arguments) {
     return NULL;
   }
   // check that the table argument is in the current active database
-  Table *table = lookup_table(table_name);
+  Table *table = get_table_from_catalog(table_name);
   if (!table) {
     log_err("L%d: parse_create_column failed. Bad table name\n", __LINE__);
     return NULL;
@@ -256,7 +256,7 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
     dbo->type = INSERT;
     dbo->operator_fields.insert_operator.table = insert_table;
     dbo->operator_fields.insert_operator.values =
-        malloc(sizeof(int) * insert_table->col_count);
+        malloc(sizeof(int) * insert_table->num_cols);
     // parse inputs until we reach the end. Turn each given string into an integer.
     while ((token = strsep(command_index, ",")) != NULL) {
       int insert_val = atoi(token);
@@ -264,7 +264,9 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
       columns_inserted++;
     }
     // check that we received the correct number of input values
-    if (columns_inserted != insert_table->col_count) {
+    if (columns_inserted != insert_table->num_cols) {
+      log_err("L%d: parse_insert failed. This table has %d columns\n", __LINE__,
+              insert_table->num_cols);
       send_message->status = INCORRECT_FORMAT;
       free(dbo->operator_fields.insert_operator.values);
       free(dbo);
