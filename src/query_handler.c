@@ -34,10 +34,12 @@ char *execute_DbOperator(DbOperator *query) {
                      query->operator_fields.create_operator.name,
                      query->operator_fields.create_operator.col_count, &create_status);
         if (create_status.code != OK) {
-          cs165_log(stdout, "adding a table failed.\n");
+          log_err("L%d: in execute_DbOperator: %s\n", __LINE__,
+                  create_status.error_message);
           res_msg = "Table creation failed.";
+        } else {
+          res_msg = "Table created.";
         }
-        res_msg = "Table created.";
       }
       break;
     default:
