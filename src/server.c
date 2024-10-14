@@ -245,6 +245,8 @@ int handle_csv_transfer(int client_socket) {
 
     if (fd == -1) {
       char filename[512];
+      // NOTE: move this file in its respective directory based on db.table.column
+      // will need to clean up since this a similar functionality as in parse.c
       snprintf(filename, sizeof(filename), "%s.bin", chunk.column_name);
       fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, 0644);
       if (fd == -1) {
@@ -287,11 +289,6 @@ int handle_csv_transfer(int client_socket) {
     memcpy(col->data + column_received, chunk.data, chunk.chunk_size);
     column_received += chunk.chunk_size;
     total_received += chunk.chunk_size;
-
-    // check what's in the column data
-    for (size_t i = 0; i < column_received / sizeof(int); i++) {
-      printf("%d ", col->data[i]);
-    }
 
     cs165_log(stdout, "Received %d bytes for column %s (Total: %zu bytes)\n",
               chunk.chunk_size, chunk.column_name, column_received);
