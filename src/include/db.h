@@ -19,11 +19,13 @@ typedef struct Result {
 typedef struct Column {
   char name[MAX_SIZE_NAME];
   int *data;
+  size_t mmap_size;
+  int disk_fd;
   //   void *index;
-  size_t num_elements;
+  size_t num_elements;  // can be derived from mmap_size (clean up later)
   long min_value;
   long max_value;
-  size_t mmap_size;
+
 } Column;
 
 /**

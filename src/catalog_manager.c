@@ -4,6 +4,7 @@
 #include <string.h>    // For strncpy
 #include <sys/stat.h>  // For mkdir
 #include <sys/types.h>
+#include <unistd.h>
 
 #include "common.h"
 #include "utils.h"
@@ -145,10 +146,40 @@ Column *create_column(Table *table, char *name, bool sorted, Status *ret_status)
   return new_column;
 }
 
+/**
+ * @brief Get the column from catalog object
+ *
+ * @param db_tbl_col_name e.g."db1.tbl1.col1"
+ * @return Column*
+ */
 Column *get_column_from_catalog(const char *db_tbl_col_name) {
-  (void)db_tbl_col_name;
-  cs165_log(stdout, "catalog_manager: Get column with args %s\n", db_tbl_col_name);
-  log_info("TODO: Implement get_column_from_catalog\n");
+  cs165_log(stdout, "catalog_manager: Get column %s from catalog\n", db_tbl_col_name);
+  // Ensure the current database is set
+  if (current_db == NULL) {
+    log_err("get_column_from_catalog: No database loaded");
+    return NULL;
+  }
+
+  // Split the db_tbl_col_name into its components
+  char db_name[MAX_SIZE_NAME];
+  char table_name[MAX_SIZE_NAME];
+  char column_name[MAX_SIZE_NAME];
+  if (sscanf(db_tbl_col_name, "%[^.].%[^.].%s", db_name, table_name, column_name) != 3) {
+    log_err("get_column_from_catalog: Invalid db_tbl_col_name format");
+    return NULL;
+  }
+
+  // Search for the column within the current database
+  for (size_t i = 0; i < current_db->tables_size; i++) {
+    if (strcmp(current_db->tables[i].name, table_name) == 0) {
+      for (size_t j = 0; j < current_db->tables[i].num_cols; j++) {
+        if (strcmp(current_db->tables[i].columns[j].name, column_name) == 0) {
+          log_info("get_column_from_catalog: Column %s found\n", column_name);
+          return &current_db->tables[i].columns[j];
+        }
+      }
+    }
+  }
   return NULL;
 }
 
@@ -184,6 +215,38 @@ Status load_data(const char *table_name, const char *column_name, const void *da
 
 Status shutdown_catalog_manager(void) {
   cs165_log(stdout, "Shutting down catalog manager\n");
-  log_err("shutdown_catalog_manager: Not implemented\n");
+  if (!current_db) {
+    cs165_log(stdout, "No active database to shutdown\n");
+    return (Status){ERROR, "No active database to shutdown"};
+  }
+
+  // Free the tables and columns
+  for (size_t i = 0; i < current_db->tables_size; i++) {
+    // free mmap'd memory column data
+    for (size_t j = 0; j < current_db->tables[i].num_cols; j++) {
+      if (current_db->tables[i].columns[j].data) {
+        cs165_log(stdout, "Freeing memory for column %s\n",
+                  current_db->tables[i].columns[j].name);
+        cs165_log(stdout, "data at i=0: %d\n", current_db->tables[i].columns[j].data[0]);
+        int last = current_db->tables[i].columns[j].num_elements - 1;
+        cs165_log(stdout, "data at last: %d\n",
+                  current_db->tables[i].columns[j].data[last]);
+        if (munmap(current_db->tables[i].columns[j].data,
+                   current_db->tables[i].columns[j].mmap_size) == -1) {
+          perror("Error unmapping memory");
+        }
+        // close if the file descriptor is valid
+        if (current_db->tables[i].columns[j].disk_fd > 0) {
+          cs165_log(stdout, "closing fd: %d\n", current_db->tables[i].columns[j].disk_fd);
+          close(current_db->tables[i].columns[j].disk_fd);
+        } else {
+          log_err("couldn't find fd for column %s\n",
+                  current_db->tables[i].columns[j].name);
+        }
+      }
+    }
+    free(current_db->tables[i].columns);
+  }
+  free(current_db->tables);
   return (Status){OK, "Catalog manager: database closed and memory freed"};
 }

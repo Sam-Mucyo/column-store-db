@@ -19,7 +19,7 @@
 #define MAX_COLUMNS 100  // TODO: Make this dynamic in upcoming milestones
 #define CSV_CHUNK_SIZE 4096
 typedef struct {
-  char column_name[256];
+  char column_name[256];  // of the form "db.table.column"
   //   int data_type;
   int chunk_size;
   size_t total_size;  // Total size of the column data (in bytes)

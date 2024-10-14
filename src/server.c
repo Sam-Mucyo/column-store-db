@@ -41,6 +41,7 @@ SOFTWARE.
 #include <sys/un.h>
 #include <unistd.h>
 
+#include "catalog_manager.h"
 #include "client_context.h"
 #include "common.h"
 #include "parse.h"
@@ -227,7 +228,7 @@ int main(void) {
 int handle_csv_transfer(int client_socket) {
   CSVChunk chunk;
   int fd = -1;
-  char *map = NULL;
+  Column *col = NULL;
   size_t total_received = 0;
   size_t column_received = 0;
   size_t column_total_size = 0;
@@ -251,7 +252,13 @@ int handle_csv_transfer(int client_socket) {
         close(fd);
         return -1;
       }
-
+      //   Ensure the column exists in the catalog
+      col = get_column_from_catalog(chunk.column_name);
+      if (!col) {
+        log_err("Column not found in catalog");
+        close(fd);
+        return -1;
+      }
       column_total_size = chunk.total_size;
 
       // Extend file to the size specified by the client
@@ -260,9 +267,13 @@ int handle_csv_transfer(int client_socket) {
         close(fd);
         return -1;
       }
-
-      map = mmap(NULL, column_total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-      if (map == MAP_FAILED) {
+      col->num_elements = column_total_size / sizeof(int);
+      col->mmap_size = column_total_size;  // NOTE: cleanup later after making this
+                                           // generic with DATA_TYPE
+      col->disk_fd = fd;
+      col->data =
+          mmap(NULL, column_total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      if (col->data == MAP_FAILED) {
         log_err("Error mmapping file");
         close(fd);
         return -1;
@@ -273,35 +284,35 @@ int handle_csv_transfer(int client_socket) {
                 chunk.column_name, column_total_size);
     }
 
-    memcpy(map + column_received, chunk.data, chunk.chunk_size);
+    memcpy(col->data + column_received, chunk.data, chunk.chunk_size);
     column_received += chunk.chunk_size;
     total_received += chunk.chunk_size;
+
+    // check what's in the column data
+    for (size_t i = 0; i < column_received / sizeof(int); i++) {
+      printf("%d ", col->data[i]);
+    }
 
     cs165_log(stdout, "Received %d bytes for column %s (Total: %zu bytes)\n",
               chunk.chunk_size, chunk.column_name, column_received);
 
     if (column_received >= column_total_size) {
-      // Unmap and close file
-      if (munmap(map, column_total_size) == -1) {
-        log_err("Error unmapping file");
-        close(fd);
-        return -1;
-      }
-      close(fd);
       fd = -1;
-      map = NULL;
-
+      // Leave mmap'd memory open for other queries: select, fetch, etc.
+      // Shutdown catalog manager, will handle this.
       cs165_log(stdout, "Finished receiving column: %s (Total: %zu bytes)\n",
                 chunk.column_name, column_received);
     }
   }
 
-  if (map) {
-    munmap(map, column_total_size);
-  }
-  if (fd != -1) {
-    close(fd);
-  }
+  // Leave mmap'd memory open for other queries: select, fetch, etc.
+  // Shutdown catalog manager, will handle this.
+  //   if (map) {
+  //     munmap(map, column_total_size);
+  //   }
+  //   if (fd != -1) {
+  //     close(fd);
+  //   }
   cs165_log(stdout, "Server finished processing data. Total received: %zu bytes\n",
             total_received);
 
