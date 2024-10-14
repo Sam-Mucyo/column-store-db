@@ -246,7 +246,7 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
       return NULL;
     }
     // lookup the table and make sure it exists.
-    Table *insert_table = lookup_table(table_name);
+    Table *insert_table = get_table_from_catalog(table_name);
     if (insert_table == NULL) {
       send_message->status = OBJECT_NOT_FOUND;
       return NULL;
@@ -289,9 +289,10 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
  *     - select(db1.tbl1.col1,20,40)     --- select all values between 20 (incl.) and 40
  *
  * @param query_command
+ * @param handle  the handle to the result of this select query
  * @return DbOperator*
  */
-DbOperator *parse_select(char *query_command) {
+DbOperator *parse_select(char *query_command, char *handle) {
   message_status status = OK_DONE;
   char **command_index = &query_command;
 
@@ -341,7 +342,7 @@ DbOperator *parse_select(char *query_command) {
   dbo->operator_fields.select_operator.comparator->gen_col = gen_col;
 
   // Initialize the handle field
-  dbo->operator_fields.select_operator.comparator->handle = NULL;
+  dbo->operator_fields.select_operator.comparator->handle = handle;
 
   log_info("parse_select: column %s, low %ld, high %ld\n", db_tbl_col_name, low_val,
            high_val);
@@ -358,11 +359,44 @@ DbOperator *parse_select(char *query_command) {
  *     - fetch(db1.tbl1.col2,s1)           --- where s1 is a handle to the result of a
  *                                              select query
  * @param query_command
+ * @param fetch_handle the handle to the result of this fetch query
  * @return DbOperator*
  */
-DbOperator *parse_fetch(char *query_command) {
-  log_info("L%d: TODO: parse_fetch received: %s\n", __LINE__, query_command);
-  return NULL;
+DbOperator *parse_fetch(char *query_command, char *fetch_handle) {
+  message_status status = OK_DONE;
+  char **command_index = &query_command;
+
+  char *db_tbl_col_name = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) return NULL;
+
+  char *handle = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) return NULL;
+
+  //   Check for the last ) in handle and replace it with a null-terminating character
+  int last_char = strlen(handle) - 1;
+  if (handle[last_char] != ')') {
+    log_err("L%d: parse_fetch failed. incorrect format\n", __LINE__);
+    return NULL;
+  }
+  handle[last_char] = '\0';
+
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  dbo->type = FETCH;
+  dbo->operator_fields.fetch_operator.fetch_handle = fetch_handle;
+  dbo->operator_fields.fetch_operator.select_handle = handle;
+
+  // Try getting column from catalog manager
+  Column *col = get_column_from_catalog(db_tbl_col_name);
+  if (!col) {
+    db_operator_free(dbo);
+    return NULL;
+  }
+  cs165_log(stdout, "parse_fetch: getting column %s\nNew handle: %s\nSelect handle: %s\n",
+            db_tbl_col_name, fetch_handle, handle);
+
+  dbo->operator_fields.fetch_operator.col = col;
+  log_info("Successfully parsed fetch command\n");
+  return dbo;
 }
 
 /**
@@ -374,12 +408,68 @@ DbOperator *parse_fetch(char *query_command) {
  *     - avg(f1)           --- where f1 is a handle to the result of a fetch query
  *
  * @param query_command
- * @return DbOperator*
+ * @param avg_handle the handle to the result of this avg query
+ * @return DbOperator* with info about the new handle and fetch handle
  */
-DbOperator *parse_avg(char *query_command) {
-  log_info("L%d: TODO: parse_avg received: %s\n", __LINE__, query_command);
-  (void)query_command;
-  return NULL;
+DbOperator *parse_avg(char *query_command, char *avg_handle) {
+  log_info("L%d: parse_avg received: %s\n", __LINE__, query_command);
+  message_status status = OK_DONE;
+  char **command_index = &query_command;
+
+  // get the fetch handle "avg(f1)" -> "f1"
+  const char *start = strchr(query_command, '(');
+  if (start == NULL) {
+    return NULL;
+  }
+  start++;
+  char *fetch_handle = strndup(start, strchr(start, ')') - start);
+
+  cs165_log(stdout, "avg_handle: %s, fetch_handle: %s\n", avg_handle, fetch_handle);
+
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  if (dbo == NULL) {
+    log_err("L%d: parse_avg failed. malloc for DbOperator failed\n", __LINE__);
+    return NULL;
+  }
+
+  dbo->type = AVG;
+  dbo->operator_fields.avg_operator.avg_handle = avg_handle;
+  dbo->operator_fields.avg_operator.fetch_handle = fetch_handle;
+
+  cs165_log(stdout, "parse_avg: avg_handle: %s, fetch_handle: %s\n", avg_handle,
+            fetch_handle);
+  log_info("Successfully parsed avg command\n");
+  return dbo;
+}
+
+DbOperator *parse_print(char *query_command) {
+  cs165_log(stdout, "L%d: parse_print received: %s\n", __LINE__, query_command);
+  message_status status = OK_DONE;
+  char **command_index = &query_command;
+
+  // get the fetch handle "print(f1)" -> "f1"
+  const char *start = strchr(query_command, '(');
+  if (start == NULL) {
+    log_err("L%d: parse_print failed. incorrect format\n", __LINE__);
+    return NULL;
+  }
+  start++;
+  char *handle = strndup(start, strchr(start, ')') - start);
+
+  cs165_log(stdout, "fetch_handle: %s\n", handle);
+
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  if (dbo == NULL) {
+    log_err("L%d: parse_print failed. malloc for DbOperator failed\n", __LINE__);
+    return NULL;
+  }
+
+  dbo->type = PRINT;
+  dbo->operator_fields.print_operator.handle_to_print = handle;
+
+  cs165_log(stdout, "handle_to_print: %s\n", handle);
+  log_info("Successfully parsed print command\n");
+  return dbo;
 }
 
 /**
@@ -440,17 +530,20 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
     dbo = parse_insert(query_command, send_message);
   } else if (strncmp(query_command, "select", 6) == 0) {
     query_command += 6;
-    dbo = parse_select(query_command);
+    dbo = parse_select(query_command, handle);
   } else if (strncmp(query_command, "fetch", 5) == 0) {
     query_command += 5;
-    dbo = parse_fetch(query_command);
+    dbo = parse_fetch(query_command, handle);
   } else if (strncmp(query_command, "avg", 3) == 0) {
     query_command += 3;
-    dbo = parse_avg(query_command);
+    dbo = parse_avg(query_command, handle);
   } else if (strncmp(query_command, "shutdown", 8) == 0) {
     dbo = malloc(sizeof(DbOperator));
     dbo->type = SHUTDOWN;
     send_message->status = SERVER_SHUTDOWN;
+  } else if (strncmp(query_command, "print", 5) == 0) {
+    query_command += 5;
+    dbo = parse_print(query_command);
   } else {
     send_message->status = UNKNOWN_COMMAND;
   }

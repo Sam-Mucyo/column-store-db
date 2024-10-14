@@ -13,6 +13,7 @@ typedef enum OperatorType {
   LOAD,
   SELECT,
   FETCH,
+  PRINT,
   AVG,
   SHUTDOWN,
 } OperatorType;
@@ -82,12 +83,19 @@ typedef struct SelectOperator {
 } SelectOperator;
 
 typedef struct FetchOperator {
-  GeneralizedColumnHandle *chandle;
+  char *fetch_handle;
+  char *select_handle;
+  Column *col;
 } FetchOperator;
 
 typedef struct AvgOperator {
-  GeneralizedColumn *gen_col;
+  char *avg_handle;
+  Column *fetch_handle;
 } AvgOperator;
+
+typedef struct PrintOperator {
+  char *handle_to_print;
+} PrintOperator;
 
 /*
  * union type holding the fields of any operator
@@ -99,6 +107,7 @@ typedef union OperatorFields {
   SelectOperator select_operator;
   FetchOperator fetch_operator;
   AvgOperator avg_operator;
+  PrintOperator print_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:
