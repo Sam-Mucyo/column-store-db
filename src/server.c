@@ -35,6 +35,7 @@ SOFTWARE.
 #include <fcntl.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
@@ -47,6 +48,8 @@ SOFTWARE.
 #include "utils.h"
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024
+
+int handle_csv_transfer(int client_socket);
 
 /**
  * handle_client(client_socket)
@@ -71,6 +74,9 @@ void handle_client(int client_socket) {
   // 2. Handle request if appropriate
   // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
   // 4. Send response to the request.
+
+  int csv_transfer_end = 0;
+
   do {
     length = recv(client_socket, &recv_message, sizeof(message), 0);
     if (length < 0) {
@@ -80,38 +86,55 @@ void handle_client(int client_socket) {
       done = 1;
     }
 
+    printf("Received message with status: %d\n", recv_message.status);
     if (!done) {
-      char recv_buffer[recv_message.length + 1];
-      length = recv(client_socket, recv_buffer, recv_message.length, 0);
-      recv_message.payload = recv_buffer;
-      recv_message.payload[recv_message.length] = '\0';
+      // TODO: transfer_end is a hack to handle the CSV transfer. Ask in OH: why, without
+      // this, the server keeps receiving msg.status = CSV_TRANSFER_START regardless of
+      // the client's message.
+      if (recv_message.status == CSV_TRANSFER_START && !csv_transfer_end) {
+        // Handle CSV transfer
+        cs165_log(stdout, "Server: Receiving CSV transfer\n");
+        if (handle_csv_transfer(client_socket) < 0) {
+          log_err("L%d: Failed to handle CSV transfer.\n", __LINE__);
+          exit(1);
+        } else {
+          log_info("Server: CSV transfer successful\n");
+        }
+        recv_message.status = CSV_TRANSFER_END;
+        csv_transfer_end = 1;
+      } else {
+        char recv_buffer[recv_message.length + 1];
+        length = recv(client_socket, recv_buffer, recv_message.length, 0);
+        recv_message.payload = recv_buffer;
+        recv_message.payload[recv_message.length] = '\0';
 
-      // 1. Parse command
-      //    Query string is converted into a request for an database operator
-      DbOperator *query = parse_command(recv_message.payload, &send_message,
-                                        client_socket, client_context);
+        // 1. Parse command
+        //    Query string is converted into a request for an database operator
+        DbOperator *query = parse_command(recv_message.payload, &send_message,
+                                          client_socket, client_context);
 
-      // 2. Handle request
-      //    Corresponding database operator is executed over the query
-      // TODO: Make the `execute_DbOperator` return a `message` struct, the status depends
-      // on the query
-      char *result = execute_DbOperator(query);
+        // 2. Handle request
+        //    Corresponding database operator is executed over the query
+        // TODO: Make the `execute_DbOperator` return a `message` struct, the status
+        // depends on the query
+        char *result = execute_DbOperator(query);
 
-      send_message.length = strlen(result);
-      char send_buffer[send_message.length + 1];
-      strcpy(send_buffer, result);
-      send_message.payload = send_buffer;
+        send_message.length = strlen(result);
+        char send_buffer[send_message.length + 1];
+        strcpy(send_buffer, result);
+        send_message.payload = send_buffer;
 
-      // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
-      if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
-        log_err("Failed to send message.");
-        exit(1);
-      }
+        // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
+        if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
+          log_err("Failed to send message with error: %s\n", strerror(errno));
+          exit(1);
+        }
 
-      // 4. Send response to the request
-      if (send(client_socket, result, send_message.length, 0) == -1) {
-        log_err("Failed to send message.");
-        exit(1);
+        // 4. Send response to the request
+        if (send(client_socket, result, send_message.length, 0) == -1) {
+          log_err("Failed to send message.");
+          exit(1);
+        }
       }
     }
   } while (!done);
@@ -198,5 +221,103 @@ int main(void) {
 
   handle_client(client_socket);
 
+  return 0;
+}
+
+int handle_csv_transfer(int client_socket) {
+  CSVChunk chunk;
+  int fd = -1;
+  char *map = NULL;
+  size_t total_received = 0;
+  size_t column_received = 0;
+  size_t column_total_size = 0;
+
+  while (1) {
+    ssize_t bytes_received = recv(client_socket, &chunk, sizeof(CSVChunk), 0);
+    if (bytes_received <= 0) {
+      break;
+    }
+
+    if (strcmp(chunk.column_name, "END_TRANSMISSION") == 0) {
+      break;
+    }
+
+    if (fd == -1) {
+      char filename[512];
+      snprintf(filename, sizeof(filename), "%s.bin", chunk.column_name);
+      fd = open(filename, O_RDWR | O_CREAT | O_TRUNC, 0644);
+      if (fd == -1) {
+        log_err("Error opening file");
+        close(fd);
+        return -1;
+      }
+
+      column_total_size = chunk.total_size;
+
+      // Extend file to the size specified by the client
+      if (ftruncate(fd, column_total_size) == -1) {
+        log_err("Error extending file");
+        close(fd);
+        return -1;
+      }
+
+      map = mmap(NULL, column_total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+      if (map == MAP_FAILED) {
+        log_err("Error mmapping file");
+        close(fd);
+        return -1;
+      }
+
+      column_received = 0;
+      cs165_log(stdout, "Started receiving column: %s (Expected size: %zu bytes)\n",
+                chunk.column_name, column_total_size);
+    }
+
+    memcpy(map + column_received, chunk.data, chunk.chunk_size);
+    column_received += chunk.chunk_size;
+    total_received += chunk.chunk_size;
+
+    cs165_log(stdout, "Received %d bytes for column %s (Total: %zu bytes)\n",
+              chunk.chunk_size, chunk.column_name, column_received);
+
+    if (column_received >= column_total_size) {
+      // Unmap and close file
+      if (munmap(map, column_total_size) == -1) {
+        log_err("Error unmapping file");
+        close(fd);
+        return -1;
+      }
+      close(fd);
+      fd = -1;
+      map = NULL;
+
+      cs165_log(stdout, "Finished receiving column: %s (Total: %zu bytes)\n",
+                chunk.column_name, column_received);
+    }
+  }
+
+  if (map) {
+    munmap(map, column_total_size);
+  }
+  if (fd != -1) {
+    close(fd);
+  }
+  cs165_log(stdout, "Server finished processing data. Total received: %zu bytes\n",
+            total_received);
+
+  // Send confirmation message to client
+  message send_message;
+  send_message.length = strlen("transfer successful\n");
+  send_message.status = OK_DONE;
+
+  if (send(client_socket, &send_message, sizeof(message), 0) == -1) {
+    log_err("Failed to send confirmation message header");
+    return -1;
+  }
+
+  if (send(client_socket, "transfer successful\n", send_message.length, 0) == -1) {
+    log_err("Failed to send confirmation message");
+    return -1;
+  }
   return 0;
 }

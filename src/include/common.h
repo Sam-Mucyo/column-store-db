@@ -14,6 +14,18 @@
 #define MAX_PATH_LEN 256
 #define STORAGE_PATH "disk"
 
+// CSV Transfer Constants
+#define CSV_BUFFER_SIZE 1024
+#define MAX_COLUMNS 100  // TODO: Make this dynamic in upcoming milestones
+#define CSV_CHUNK_SIZE 4096
+typedef struct {
+  char column_name[256];
+  //   int data_type;
+  int chunk_size;
+  size_t total_size;  // Total size of the column data (in bytes)
+  char data[CSV_CHUNK_SIZE];
+} CSVChunk;
+
 /**
  * DataType
  * Flag to mark what type of data is held in the struct.
@@ -45,6 +57,8 @@ typedef enum message_status {
   OK_DONE,
   OK_WAIT_FOR_RESPONSE,
   SERVER_SHUTDOWN,
+  CSV_TRANSFER_START,
+  CSV_TRANSFER_END,
   UNKNOWN_COMMAND,
   QUERY_UNSUPPORTED,
   OBJECT_ALREADY_EXISTS,
