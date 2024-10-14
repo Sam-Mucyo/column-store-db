@@ -314,6 +314,19 @@ DbOperator *parse_select(char *query_command) {
   dbo->operator_fields.select_operator.comparator->p_low = low_val;
   dbo->operator_fields.select_operator.comparator->p_high = high_val;
 
+  // Set comparison types based on input values
+  if (low_val == LONG_MIN) {
+    dbo->operator_fields.select_operator.comparator->type1 = NO_COMPARISON;
+  } else {
+    dbo->operator_fields.select_operator.comparator->type1 = GREATER_THAN_OR_EQUAL;
+  }
+
+  if (high_val == LONG_MAX) {
+    dbo->operator_fields.select_operator.comparator->type2 = NO_COMPARISON;
+  } else {
+    dbo->operator_fields.select_operator.comparator->type2 = LESS_THAN_OR_EQUAL;
+  }
+
   // Try getting column from catalog manager
   cs165_log(stdout, "parse_select: getting column %s from catalog\n", db_tbl_col_name);
   Column *col = get_column_from_catalog(db_tbl_col_name);
@@ -326,6 +339,12 @@ DbOperator *parse_select(char *query_command) {
   gen_col->column_type = COLUMN;
   gen_col->column_pointer.column = col;
   dbo->operator_fields.select_operator.comparator->gen_col = gen_col;
+
+  // Initialize the handle field
+  dbo->operator_fields.select_operator.comparator->handle = NULL;
+
+  log_info("parse_select: column %s, low %ld, high %ld\n", db_tbl_col_name, low_val,
+           high_val);
 
   return dbo;
 }
