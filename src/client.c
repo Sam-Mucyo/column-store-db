@@ -2,6 +2,7 @@
 Unix machines. Please look up _XOPEN_SOURCE for more details. As well, if your code does
 not compile on the lab machine please look into this as a a source of error. */
 #define _XOPEN_SOURCE
+#define _POSIX_C_SOURCE 200809L  // for getline() function
 
 /**
  * client.c

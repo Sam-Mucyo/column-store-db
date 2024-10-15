@@ -11,7 +11,7 @@
 // Limits the size of a name in our database to 64 characters
 #define MAX_SIZE_NAME 64
 #define HANDLE_MAX_SIZE 64
-#define MAX_PATH_LEN 256
+#define MAX_PATH_LEN 512
 #define STORAGE_PATH "disk"
 
 // CSV Transfer Constants

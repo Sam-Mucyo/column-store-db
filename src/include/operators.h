@@ -90,7 +90,7 @@ typedef struct FetchOperator {
 
 typedef struct AvgOperator {
   char *avg_handle;
-  Column *fetch_handle;
+  char *fetch_handle;
 } AvgOperator;
 
 typedef struct PrintOperator {

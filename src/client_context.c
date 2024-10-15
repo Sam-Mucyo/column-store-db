@@ -6,7 +6,7 @@
 
 #include "utils.h"
 
-extern ClientContext* g_client_context = NULL;
+ClientContext* g_client_context = NULL;
 
 // Initialize the global ClientContext
 void init_client_context() {

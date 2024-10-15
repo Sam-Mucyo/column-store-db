@@ -144,7 +144,7 @@ Status exec_select(DbOperator *query) {
 
   cs165_log(stdout, "going through indices from 0 to %d\n", column->num_elements);
   // Perform the selection based on the comparator
-  for (int i = 0; i < column->num_elements; i++) {
+  for (size_t i = 0; i < column->num_elements; i++) {
     int value = column->data[i];
     bool include = false;
 
@@ -281,9 +281,9 @@ Status exec_fetch(DbOperator *query) {
 
   // Fetch the values
   //   cs165_log(stdout, "Fetched values: ");
-  for (int i = 0; i < select_result->num_tuples; i++) {
-    int index = ((int *)select_result->payload)[i];
-    if (index < 0 || index >= fetch_col->num_elements) {
+  for (size_t i = 0; i < select_result->num_tuples; i++) {
+    size_t index = ((int *)select_result->payload)[i];
+    if (index >= fetch_col->num_elements) {
       free(fetch_result->payload);
       free(fetch_result);
       status.code = ERROR;
@@ -348,7 +348,7 @@ Status exec_print(DbOperator *query) {
   switch (gen_col->column_type) {
     case RESULT: {
       Result *result = gen_col->column_pointer.result;
-      for (int i = 0; i < result->num_tuples; i++) {
+      for (size_t i = 0; i < result->num_tuples; i++) {
         // Ensure we have enough space in the buffer
         if (current_pos + 20 >
             buffer_size) {  // NOTE:assume int is at most 20 characters long
@@ -386,7 +386,7 @@ Status exec_print(DbOperator *query) {
     }
     case COLUMN: {
       Column *column = gen_col->column_pointer.column;
-      for (int i = 0; i < column->num_elements; i++) {
+      for (size_t i = 0; i < column->num_elements; i++) {
         // Ensure we have enough space in the buffer
         if (current_pos + 20 > buffer_size) {
           buffer_size *= 2;
@@ -444,7 +444,7 @@ Status exec_avg(DbOperator *query) {
 
   // Calculate the average
   double sum = 0.0;
-  for (int i = 0; i < fetch_result->num_tuples; i++) {
+  for (size_t i = 0; i < fetch_result->num_tuples; i++) {
     sum += ((int *)fetch_result->payload)[i];
   }
 
