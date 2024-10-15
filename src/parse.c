@@ -412,8 +412,6 @@ DbOperator *parse_fetch(char *query_command, char *fetch_handle) {
  */
 DbOperator *parse_avg(char *query_command, char *avg_handle) {
   log_info("L%d: parse_avg received: %s\n", __LINE__, query_command);
-  message_status status = OK_DONE;
-  char **command_index = &query_command;
 
   // get the fetch handle "avg(f1)" -> "f1"
   const char *start = strchr(query_command, '(');
@@ -443,8 +441,6 @@ DbOperator *parse_avg(char *query_command, char *avg_handle) {
 
 DbOperator *parse_print(char *query_command) {
   cs165_log(stdout, "L%d: parse_print received: %s\n", __LINE__, query_command);
-  message_status status = OK_DONE;
-  char **command_index = &query_command;
 
   // get the fetch handle "print(f1)" -> "f1"
   const char *start = strchr(query_command, '(');
