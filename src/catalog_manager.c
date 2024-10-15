@@ -201,6 +201,24 @@ int create_directory(const char *path) {
 
 Status create_db(const char *db_name) {
   cs165_log(stdout, "Creating database %s\n", db_name);
+  // Remove any of databases in STORAGE_PATH, if any. Since we will only be working with
+  // one database at a time.
+  DIR *dir = opendir(STORAGE_PATH);
+  if (dir) {
+    // close this dir and rm -r STORAGE_PATH
+    closedir(dir);
+
+#ifdef __linux__
+    char cmd[MAX_PATH_LEN];
+    snprintf(cmd, MAX_PATH_LEN, "rm -r %s", STORAGE_PATH);
+    system(cmd);
+#else
+    log_err(
+        "create_db: Multiple databases not supported. Please delete the existing "
+        "databases manually to avoid unexpected behavior\n");
+    return (Status){ERROR, "Unsupported OS"};
+#endif
+  }
 
   // Check if the db name is valid
   if (strlen(db_name) > MAX_SIZE_NAME) {

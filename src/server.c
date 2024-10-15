@@ -57,7 +57,7 @@ int handle_csv_transfer(int client_socket);
  * This is the execution routine after a client has connected.
  * It will continually listen for messages from the client and execute queries.
  **/
-void handle_client(int client_socket) {
+void handle_client(int client_socket, int *shutdown) {
   int done = 0;
   int length = 0;
 
@@ -113,6 +113,7 @@ void handle_client(int client_socket) {
                                           client_socket, client_context);
 
         if (query != NULL && query->type == SHUTDOWN) {
+          *shutdown = 1;
           done = 1;
         }
         // 2. Handle request
@@ -213,12 +214,12 @@ int main(void) {
   struct sockaddr_un remote;
   socklen_t t = sizeof(remote);
   int client_socket = 0;
-  while (1) {
+  int shutdown = 0;
+  while (!shutdown) {
     if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
       log_err("L%d: Failed to accept a new connection.\n", __LINE__);
     }
-
-    handle_client(client_socket);
+    handle_client(client_socket, &shutdown);
   }
   return 0;
 }
