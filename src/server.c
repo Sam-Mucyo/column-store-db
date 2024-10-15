@@ -82,7 +82,6 @@ void handle_client(int client_socket) {
     length = recv(client_socket, &recv_message, sizeof(message), 0);
     if (length < 0) {
       log_err("Client connection closed!\n");
-      exit(1);
     } else if (length == 0) {
       done = 1;
     }
@@ -97,7 +96,6 @@ void handle_client(int client_socket) {
         cs165_log(stdout, "Server: Receiving CSV transfer\n");
         if (handle_csv_transfer(client_socket) < 0) {
           log_err("L%d: Failed to handle CSV transfer.\n", __LINE__);
-          exit(1);
         } else {
           log_info("Server: CSV transfer successful\n");
         }
@@ -114,13 +112,15 @@ void handle_client(int client_socket) {
         DbOperator *query = parse_command(recv_message.payload, &send_message,
                                           client_socket, client_context);
 
+        if (query != NULL && query->type == SHUTDOWN) {
+          done = 1;
+        }
         // 2. Handle request
         //    Corresponding database operator is executed over the query
         // TODO: Make the `execute_DbOperator` return a `message` struct, the status
         // depends on the query
         char *result = execute_DbOperator(query);
 
-        cs165_log(stdout, "Result: %s\nPreparing to send to client\n", result);
         send_message.length = strlen(result);
         char send_buffer[send_message.length + 1];
         strcpy(send_buffer, result);
@@ -129,13 +129,11 @@ void handle_client(int client_socket) {
         // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
         if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
           log_err("Failed to send message with error: %s\n", strerror(errno));
-          exit(1);
         }
 
         // 4. Send response to the request
         if (send(client_socket, result, send_message.length, 0) == -1) {
           log_err("Failed to send message.");
-          exit(1);
         }
       }
     }
@@ -215,14 +213,13 @@ int main(void) {
   struct sockaddr_un remote;
   socklen_t t = sizeof(remote);
   int client_socket = 0;
+  while (1) {
+    if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
+      log_err("L%d: Failed to accept a new connection.\n", __LINE__);
+    }
 
-  if ((client_socket = accept(server_socket, (struct sockaddr *)&remote, &t)) == -1) {
-    log_err("L%d: Failed to accept a new connection.\n", __LINE__);
-    exit(1);
+    handle_client(client_socket);
   }
-
-  handle_client(client_socket);
-
   return 0;
 }
 
@@ -316,7 +313,7 @@ int handle_csv_transfer(int client_socket) {
 
   // Send confirmation message to client
   message send_message;
-  send_message.length = strlen("transfer successful\n");
+  send_message.length = strlen("-- transfer successful\n");
   send_message.status = OK_DONE;
 
   if (send(client_socket, &send_message, sizeof(message), 0) == -1) {
@@ -324,7 +321,7 @@ int handle_csv_transfer(int client_socket) {
     return -1;
   }
 
-  if (send(client_socket, "transfer successful\n", send_message.length, 0) == -1) {
+  if (send(client_socket, "-- transfer successful\n", send_message.length, 0) == -1) {
     log_err("Failed to send confirmation message");
     return -1;
   }

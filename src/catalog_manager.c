@@ -234,7 +234,7 @@ Status create_db(const char *db_name) {
   current_db->tables_size = 0;
   current_db->tables_capacity = 0;
   log_info("Database %s created successfully\n", db_name);
-  return (Status){OK, "Database created and current_db initialized"};
+  return (Status){OK, "-- Database created and current_db initialized"};
 }
 
 Table *create_table(Db *db, const char *name, size_t num_columns, Status *status) {
@@ -284,7 +284,7 @@ Table *create_table(Db *db, const char *name, size_t num_columns, Status *status
 
   db->tables_size++;
   log_info("Table %s created successfully\n", name);
-  *status = (Status){OK, "Table created successfully"};
+  *status = (Status){OK, "-- Table created successfully"};
   return new_table;
 }
 
@@ -316,7 +316,7 @@ Column *create_column(Table *table, char *name, bool sorted, Status *ret_status)
 
   table->num_cols++;
   log_info("Column %s created successfully\n", name);
-  *ret_status = (Status){OK, "Column created successfully"};
+  *ret_status = (Status){OK, "-- Column created successfully"};
   return new_column;
 }
 
@@ -373,18 +373,6 @@ Table *get_table_from_catalog(const char *table_name) {
 
   log_err("get_table_from_catalog: Table not found");
   return NULL;
-}
-
-Status load_data(const char *table_name, const char *column_name, const void *data,
-                 size_t num_elements) {
-  (void)table_name;
-  (void)column_name;
-  (void)data;
-  (void)num_elements;
-  cs165_log(stdout, "catalog_manager: Load data into column %s in table %s\n",
-            column_name, table_name);
-  log_info("TODO: Implement load_data\n");
-  return (Status){OK, NULL};
 }
 
 Status shutdown_catalog_manager(void) {

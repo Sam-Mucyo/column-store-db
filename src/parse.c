@@ -317,10 +317,11 @@ DbOperator *parse_select(char *query_command, char *handle) {
   }
 
   char *high_str = next_token(command_index, &status);
+  printf("high_str: %s\n", high_str);
   if (status == INCORRECT_FORMAT) {
     return NULL;
   }
-  if (strcmp(high_str, "null") == 0) {
+  if (strcmp(high_str, "null)") == 0) {
     dbo->operator_fields.select_operator.comparator->type2 = NO_COMPARISON;
   } else {
     dbo->operator_fields.select_operator.comparator->type2 = LESS_THAN;

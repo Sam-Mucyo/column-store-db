@@ -94,8 +94,6 @@ int main(void) {
         if (send_csv_file(client_socket, filename) == -1) {
           log_err("Failed to send CSV file");
           exit(1);
-        } else {
-          log_info("Client: CSV file sent successfully\n");
         }
       } else {
         // cs165_log(stdout, "sending message metadata\n");
@@ -342,7 +340,7 @@ int send_csv_file(int client_socket, const char *filename) {
       free(columns[i]);
     }
   }
-  printf("Client finished sending data\n");
+  //   printf("Client finished sending data\n");
 
   return 0;
 }

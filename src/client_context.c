@@ -65,7 +65,8 @@ Status add_handle(const char* name, GeneralizedColumn* gen_col) {
 
 // Get a handle from the chandle_table
 GeneralizedColumn* get_handle(const char* name) {
-  for (int i = 0; i < g_client_context->chandles_in_use; i++) {
+  // use most recent handle
+  for (int i = g_client_context->chandles_in_use - 1; i >= 0; i--) {
     if (strcmp(g_client_context->chandle_table[i].name, name) == 0) {
       return &g_client_context->chandle_table[i].generalized_column;
     }

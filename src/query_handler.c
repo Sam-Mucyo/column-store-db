@@ -18,7 +18,7 @@ Status exec_print(DbOperator *query);
 char *execute_DbOperator(DbOperator *query) {
   if (!query) {
     cs165_log(stdout, "query executor received a null query.\n");
-    return "Unsurpported query.";
+    return " ";
   }
   char *res_msg = "executing query";
   switch (query->type) {
@@ -29,7 +29,7 @@ char *execute_DbOperator(DbOperator *query) {
     case CREATE:
       if (query->operator_fields.create_operator.create_type == _DB) {
         if (create_db(query->operator_fields.create_operator.name).code == OK) {
-          res_msg = "Database created.";
+          res_msg = "-- Database created.";
         } else {
           res_msg = "Database creation failed.";
         }
@@ -43,14 +43,14 @@ char *execute_DbOperator(DbOperator *query) {
                   create_status.error_message);
           res_msg = "Table creation failed.";
         } else {
-          res_msg = "Table created.";
+          res_msg = "-- Table created.";
         }
       } else if (query->operator_fields.create_operator.create_type == _COLUMN) {
         Status status;
         create_column(query->operator_fields.create_operator.table,
                       query->operator_fields.create_operator.name, false, &status);
         if (status.code == OK) {
-          res_msg = "Column created.";
+          res_msg = "-- Column created.";
         } else {
           res_msg = "Column creation failed.";
         }
@@ -151,11 +151,11 @@ Status exec_select(DbOperator *query) {
     // cs165_log(stdout, "comparing value %d with low %ld and high %ld\n", value,
     //           comparator->p_low, comparator->p_high);
     // cs165_log(stdout, "Type1: %d, Type2: %d\n", comparator->type1, comparator->type2);
-    if (comparator->type2 != NO_COMPARISON &&
+    if (comparator->type1 == NO_COMPARISON && comparator->type2 != NO_COMPARISON &&
         compare(comparator->type2, comparator->p_high, value)) {
       include = true;
     }
-    if (comparator->type1 != NO_COMPARISON &&
+    if (comparator->type2 == NO_COMPARISON && comparator->type1 != NO_COMPARISON &&
         compare(comparator->type1, comparator->p_low, value)) {
       include = true;
     }
@@ -196,12 +196,12 @@ Status exec_select(DbOperator *query) {
     if (gen_col->column_type == RESULT) {
       Result *res = gen_col->column_pointer.result;
       cs165_log(stdout, "Result %d has %d tuples\n", i, res->num_tuples);
-      cs165_log(stdout, "Result %d has payload %p\n", i, res->payload);
-      //   print payload
-      for (int j = 0; j < res->num_tuples; j++) {
-        printf("%d ", ((int *)res->payload)[j]);
-      }
-      printf("\n");
+      //   cs165_log(stdout, "Result %d has payload %p\n", i, res->payload);
+      //   //   print payload
+      //   for (int j = 0; j < res->num_tuples; j++) {
+      //     printf("%d ", ((int *)res->payload)[j]);
+      //   }
+      //   printf("\n");
     }
   }
   if (g_client_context->variables_in_use >= MAX_VARIABLES) {
@@ -449,7 +449,6 @@ Status exec_avg(DbOperator *query) {
   }
 
   double average = sum / fetch_result->num_tuples;
-  average = (int)(average * 100) / 100.0;
 
   // Create a new Result to store the average
   Result *avg_result = malloc(sizeof(Result));
