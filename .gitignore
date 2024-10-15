@@ -2,6 +2,9 @@
 .DS_Store
 *.vscode
 
+#DB Storage file 
+src/disk/
+
 # Outputs
 infra_outputs
 staff_test
@@ -12,6 +15,9 @@ generated_data
 html/
 latex/
 Doxyfile
+docs/colDbDesign.drawio - draw.io_files/
+docs/colDbDesign.drawio\ -\ draw.io.html
+
 # Object files
 obj/*
 *.o

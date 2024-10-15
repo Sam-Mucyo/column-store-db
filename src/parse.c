@@ -10,13 +10,14 @@
 #include "parse.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "catalog_manager.h"
 #include "client_context.h"
-#include "cs165_api.h"
 #include "utils.h"
 
 /**
@@ -35,10 +36,72 @@ char *next_token(char **tokenizer, message_status *status) {
 }
 
 /**
- * This method takes in a string representing the arguments to create a table.
- * It parses those arguments, checks that they are valid, and creates a table.
- **/
+ * @brief parse_create_column
+ * This method takes in a string representing the arguments to create a column, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ * Example original query:
+ *      - create(col,"col1",db1.tbl1)
+ *      - create(col,"col2",db1.tbl1)
+ *
+ * @param create_arguments the string representing the arguments to create a column
+ * @return DbOperator*
+ */
+DbOperator *parse_create_column(char *create_arguments) {
+  message_status status = OK_DONE;
+  char **create_arguments_index = &create_arguments;
+  char *column_name = next_token(create_arguments_index, &status);
+  char *db_and_table_name = next_token(create_arguments_index, &status);
 
+  // not enough arguments
+  if (status == INCORRECT_FORMAT) {
+    log_err("L%d: parse_create_column failed. Not enough arguments\n", __LINE__);
+    return NULL;
+  }
+
+  // split db and table name
+  char *db_name = strsep(&db_and_table_name, ".");
+  char *table_name = db_and_table_name;
+
+  // last character should be a ')', replace it with a null-terminating character
+  int last_char = strlen(table_name) - 1;
+  if (table_name[last_char] != ')') {
+    log_err("L%d: parse_create_column failed. incorrect format\n", __LINE__);
+    return NULL;
+  }
+  table_name[last_char] = '\0';
+  // Get the column name free of quotation marks
+  column_name = trim_quotes(column_name);
+  // check that the database argument is the current active database
+  if (!current_db || strcmp(current_db->name, db_name) != 0) {
+    log_err("L%d: parse_create_column failed. Bad db name\n", __LINE__);
+    return NULL;
+  }
+  // check that the table argument is in the current active database
+  Table *table = get_table_from_catalog(table_name);
+  if (!table) {
+    log_err("L%d: parse_create_column failed. Bad table name\n", __LINE__);
+    return NULL;
+  }
+  // make create dbo for column
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  dbo->type = CREATE;
+  dbo->operator_fields.create_operator.create_type = _COLUMN;
+  strcpy(dbo->operator_fields.create_operator.name, column_name);
+  dbo->operator_fields.create_operator.db = current_db;
+  dbo->operator_fields.create_operator.table = table;
+  return dbo;
+}
+
+/**
+ * @brief parse_create_tbl
+ * This method takes in a string representing the arguments to create a table, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ * Example original query:
+ *     - create(tbl,"tbl1",db1,3)
+ *
+ * @param create_arguments
+ * @return DbOperator*
+ */
 DbOperator *parse_create_tbl(char *create_arguments) {
   message_status status = OK_DONE;
   char **create_arguments_index = &create_arguments;
@@ -80,10 +143,15 @@ DbOperator *parse_create_tbl(char *create_arguments) {
 }
 
 /**
- * This method takes in a string representing the arguments to create a database.
- * It parses those arguments, checks that they are valid, and creates a database.
- **/
-
+ * @brief parse_create_db
+ * This method takes in a string representing the arguments to create a database, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ * Example original query:
+ *     - create(db,"db1")
+ *
+ * @param create_arguments
+ * @return DbOperator*
+ */
 DbOperator *parse_create_db(char *create_arguments) {
   char *token;
   token = strsep(&create_arguments, ",");
@@ -120,7 +188,7 @@ DbOperator *parse_create_db(char *create_arguments) {
  *to the next function
  **/
 DbOperator *parse_create(char *create_arguments) {
-  message_status mes_status;
+  message_status mes_status = OK_DONE;
   DbOperator *dbo = NULL;
   char *tokenizer_copy, *to_free;
   // Since strsep destroys input, we create a copy of our input.
@@ -140,6 +208,8 @@ DbOperator *parse_create(char *create_arguments) {
         dbo = parse_create_db(tokenizer_copy);
       } else if (strcmp(token, "tbl") == 0) {
         dbo = parse_create_tbl(tokenizer_copy);
+      } else if (strcmp(token, "col") == 0) {
+        dbo = parse_create_column(tokenizer_copy);
       } else {
         mes_status = UNKNOWN_COMMAND;
       }
@@ -152,10 +222,17 @@ DbOperator *parse_create(char *create_arguments) {
 }
 
 /**
- * parse_insert reads in the arguments for a create statement and
- * then passes these arguments to a database function to insert a row.
- **/
-
+ * @brief parse_insert
+ * Takes in a string representing the arguments to insert into a table, parses them, and
+ * returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ *
+ * Example original query:
+ *    - relational_insert(db1.tbl2,-1,-11,-111,-1111)  --- if db1.tbl2 has 4 columns
+ *
+ * @param query_command
+ * @param send_message
+ * @return DbOperator*
+ */
 DbOperator *parse_insert(char *query_command, message *send_message) {
   unsigned int columns_inserted = 0;
   char *token = NULL;
@@ -169,7 +246,7 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
       return NULL;
     }
     // lookup the table and make sure it exists.
-    Table *insert_table = lookup_table(table_name);
+    Table *insert_table = get_table_from_catalog(table_name);
     if (insert_table == NULL) {
       send_message->status = OBJECT_NOT_FOUND;
       return NULL;
@@ -179,7 +256,7 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
     dbo->type = INSERT;
     dbo->operator_fields.insert_operator.table = insert_table;
     dbo->operator_fields.insert_operator.values =
-        malloc(sizeof(int) * insert_table->col_count);
+        malloc(sizeof(int) * insert_table->num_cols);
     // parse inputs until we reach the end. Turn each given string into an integer.
     while ((token = strsep(command_index, ",")) != NULL) {
       int insert_val = atoi(token);
@@ -187,8 +264,11 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
       columns_inserted++;
     }
     // check that we received the correct number of input values
-    if (columns_inserted != insert_table->col_count) {
+    if (columns_inserted != insert_table->num_cols) {
+      log_err("L%d: parse_insert failed. This table has %d columns\n", __LINE__,
+              insert_table->num_cols);
       send_message->status = INCORRECT_FORMAT;
+      free(dbo->operator_fields.insert_operator.values);
       free(dbo);
       return NULL;
     }
@@ -200,16 +280,209 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
 }
 
 /**
- * parse_command takes as input the send_message from the client and then
- * parses it into the appropriate query. Stores into send_message the
- * status to send back.
- * Returns a db_operator.
+ * @brief parse_select
+ * This method takes in a string representing the arguments to select from a table, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
  *
- * Getting Started Hint:
- *      What commands are currently supported for parsing in the starter code
- *distribution? How would you add a new command type to parse? What if such command
- *requires multiple arguments?
- **/
+ * Example query (without a handle):
+ *     - select(db1.tbl1.col1,null,20)   --- select all values strictly less than 20
+ *     - select(db1.tbl1.col1,20,40)     --- select all values between 20 (incl.) and 40
+ *
+ * @param query_command
+ * @param handle  the handle to the result of this select query
+ * @return DbOperator*
+ */
+DbOperator *parse_select(char *query_command, char *handle) {
+  message_status status = OK_DONE;
+  char **command_index = &query_command;
+
+  char *db_tbl_col_name = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) return NULL;
+
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  dbo->type = SELECT;
+  dbo->operator_fields.select_operator.comparator = malloc(sizeof(Comparator));
+
+  char *low_str = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) {
+    return NULL;
+  }
+  if (strcmp(low_str, "null") == 0) {
+    dbo->operator_fields.select_operator.comparator->type1 = NO_COMPARISON;
+  } else {
+    dbo->operator_fields.select_operator.comparator->type1 = GREATER_THAN_OR_EQUAL;
+    dbo->operator_fields.select_operator.comparator->p_low = atol(low_str);
+    cs165_log(stdout, "parse_select: low_val: %ld\n",
+              dbo->operator_fields.select_operator.comparator->p_low);
+  }
+
+  char *high_str = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) {
+    return NULL;
+  }
+  if (strcmp(high_str, "null") == 0) {
+    dbo->operator_fields.select_operator.comparator->type2 = NO_COMPARISON;
+  } else {
+    dbo->operator_fields.select_operator.comparator->type2 = LESS_THAN;
+    dbo->operator_fields.select_operator.comparator->p_high = atol(high_str);
+    cs165_log(stdout, "parse_select: high_val: %ld\n",
+              dbo->operator_fields.select_operator.comparator->p_high);
+  }
+
+  // Try getting column from catalog manager
+  cs165_log(stdout, "parse_select: getting column %s from catalog\n", db_tbl_col_name);
+  Column *col = get_column_from_catalog(db_tbl_col_name);
+  if (!col) {
+    db_operator_free(dbo);
+    return NULL;
+  }
+
+  GeneralizedColumn *gen_col = malloc(sizeof(GeneralizedColumn));
+  gen_col->column_type = COLUMN;
+  gen_col->column_pointer.column = col;
+  dbo->operator_fields.select_operator.comparator->gen_col = gen_col;
+
+  // Initialize the handle field
+  dbo->operator_fields.select_operator.comparator->handle = handle;
+
+  return dbo;
+}
+
+/**
+ * @brief parse_fetch
+ * This method takes in a string representing the arguments to fetch from a column, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ *
+ * Example query (without a handle):
+ *     - fetch(db1.tbl1.col2,s1)           --- where s1 is a handle to the result of a
+ *                                              select query
+ * @param query_command
+ * @param fetch_handle the handle to the result of this fetch query
+ * @return DbOperator*
+ */
+DbOperator *parse_fetch(char *query_command, char *fetch_handle) {
+  message_status status = OK_DONE;
+  char **command_index = &query_command;
+
+  char *db_tbl_col_name = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) return NULL;
+
+  char *handle = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) return NULL;
+
+  //   Check for the last ) in handle and replace it with a null-terminating character
+  int last_char = strlen(handle) - 1;
+  if (handle[last_char] != ')') {
+    log_err("L%d: parse_fetch failed. incorrect format\n", __LINE__);
+    return NULL;
+  }
+  handle[last_char] = '\0';
+
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  dbo->type = FETCH;
+  dbo->operator_fields.fetch_operator.fetch_handle = fetch_handle;
+  dbo->operator_fields.fetch_operator.select_handle = handle;
+
+  // Try getting column from catalog manager
+  Column *col = get_column_from_catalog(db_tbl_col_name);
+  if (!col) {
+    db_operator_free(dbo);
+    return NULL;
+  }
+  cs165_log(stdout, "parse_fetch: getting column %s\nNew handle: %s\nSelect handle: %s\n",
+            db_tbl_col_name, fetch_handle, handle);
+
+  dbo->operator_fields.fetch_operator.col = col;
+  log_info("Successfully parsed fetch command\n");
+  return dbo;
+}
+
+/**
+ * @brief parse_avg
+ * This method takes in a string representing the arguments to average a column, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ *
+ * Example query (without a handle):
+ *     - avg(f1)           --- where f1 is a handle to the result of a fetch query
+ *
+ * @param query_command
+ * @param avg_handle the handle to the result of this avg query
+ * @return DbOperator* with info about the new handle and fetch handle
+ */
+DbOperator *parse_avg(char *query_command, char *avg_handle) {
+  log_info("L%d: parse_avg received: %s\n", __LINE__, query_command);
+  message_status status = OK_DONE;
+  char **command_index = &query_command;
+
+  // get the fetch handle "avg(f1)" -> "f1"
+  const char *start = strchr(query_command, '(');
+  if (start == NULL) {
+    return NULL;
+  }
+  start++;
+  char *fetch_handle = strndup(start, strchr(start, ')') - start);
+
+  cs165_log(stdout, "avg_handle: %s, fetch_handle: %s\n", avg_handle, fetch_handle);
+
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  if (dbo == NULL) {
+    log_err("L%d: parse_avg failed. malloc for DbOperator failed\n", __LINE__);
+    return NULL;
+  }
+
+  dbo->type = AVG;
+  dbo->operator_fields.avg_operator.avg_handle = avg_handle;
+  dbo->operator_fields.avg_operator.fetch_handle = fetch_handle;
+
+  cs165_log(stdout, "parse_avg: avg_handle: %s, fetch_handle: %s\n", avg_handle,
+            fetch_handle);
+  log_info("Successfully parsed avg command\n");
+  return dbo;
+}
+
+DbOperator *parse_print(char *query_command) {
+  cs165_log(stdout, "L%d: parse_print received: %s\n", __LINE__, query_command);
+  message_status status = OK_DONE;
+  char **command_index = &query_command;
+
+  // get the fetch handle "print(f1)" -> "f1"
+  const char *start = strchr(query_command, '(');
+  if (start == NULL) {
+    log_err("L%d: parse_print failed. incorrect format\n", __LINE__);
+    return NULL;
+  }
+  start++;
+  char *handle = strndup(start, strchr(start, ')') - start);
+
+  cs165_log(stdout, "fetch_handle: %s\n", handle);
+
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  if (dbo == NULL) {
+    log_err("L%d: parse_print failed. malloc for DbOperator failed\n", __LINE__);
+    return NULL;
+  }
+
+  dbo->type = PRINT;
+  dbo->operator_fields.print_operator.handle_to_print = handle;
+
+  cs165_log(stdout, "handle_to_print: %s\n", handle);
+  log_info("Successfully parsed print command\n");
+  return dbo;
+}
+
+/**
+ * @brief parse_command
+ * This method takes in a string representing the initial raw input from the client,
+ * uses the first word to determine its category: create, insert, select, fetch, etc.
+ * and then passes the arguments to the appropriate parsing function.
+ *
+ * @param query_command
+ * @param send_message
+ * @param client_socket
+ * @param context
+ * @return DbOperator* the database operator to be executed. NULL if the command is not
+ * recognized.
+ */
 DbOperator *parse_command(char *query_command, message *send_message, int client_socket,
                           ClientContext *context) {
   // a second option is to malloc the dbo here (instead of inside the parse
@@ -253,6 +526,24 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
   } else if (strncmp(query_command, "relational_insert", 17) == 0) {
     query_command += 17;
     dbo = parse_insert(query_command, send_message);
+  } else if (strncmp(query_command, "select", 6) == 0) {
+    query_command += 6;
+    dbo = parse_select(query_command, handle);
+  } else if (strncmp(query_command, "fetch", 5) == 0) {
+    query_command += 5;
+    dbo = parse_fetch(query_command, handle);
+  } else if (strncmp(query_command, "avg", 3) == 0) {
+    query_command += 3;
+    dbo = parse_avg(query_command, handle);
+  } else if (strncmp(query_command, "shutdown", 8) == 0) {
+    dbo = malloc(sizeof(DbOperator));
+    dbo->type = SHUTDOWN;
+    send_message->status = SERVER_SHUTDOWN;
+  } else if (strncmp(query_command, "print", 5) == 0) {
+    query_command += 5;
+    dbo = parse_print(query_command);
+  } else {
+    send_message->status = UNKNOWN_COMMAND;
   }
   if (dbo == NULL) {
     return dbo;
