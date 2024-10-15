@@ -120,6 +120,7 @@ void handle_client(int client_socket) {
         // depends on the query
         char *result = execute_DbOperator(query);
 
+        cs165_log(stdout, "Result: %s\nPreparing to send to client\n", result);
         send_message.length = strlen(result);
         char send_buffer[send_message.length + 1];
         strcpy(send_buffer, result);

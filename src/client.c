@@ -84,13 +84,13 @@ int main(void) {
 
         // Send a special message to indicate CSV transfer
         send_message.status = CSV_TRANSFER_START;
-        cs165_log(stdout, "sending csv transfer start message\n");
+        // cs165_log(stdout, "sending csv transfer start message\n");
         if (send(client_socket, &send_message, sizeof(message), 0) == -1) {
           log_err("Failed to send CSV transfer start message");
           exit(1);
         }
 
-        cs165_log(stdout, "sending csv file\n");
+        // cs165_log(stdout, "sending csv file\n");
         if (send_csv_file(client_socket, filename) == -1) {
           log_err("Failed to send CSV file");
           exit(1);
@@ -98,14 +98,14 @@ int main(void) {
           log_info("Client: CSV file sent successfully\n");
         }
       } else {
-        cs165_log(stdout, "sending message metadata\n");
+        // cs165_log(stdout, "sending message metadata\n");
         // Send the message_header, which tells server payload size
         if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
           log_err("Failed to send message header.");
           exit(1);
         }
 
-        cs165_log(stdout, "sending message payload:%s\n", send_message.payload);
+        // cs165_log(stdout, "sending message payload:%s\n", send_message.payload);
         // Send the payload (query) to server
         if (send(client_socket, send_message.payload, send_message.length, 0) == -1) {
           log_err("Failed to send query payload.");
@@ -125,7 +125,9 @@ int main(void) {
           // Receive the payload and print it out
           if ((len = recv(client_socket, payload, num_bytes, 0)) > 0) {
             payload[num_bytes] = '\0';
-            printf("%s\n", payload);
+            if (strncmp(payload, "OK", 2) != 0) {
+              printf("\n%s\n", payload);
+            }
           }
         }
       } else {
@@ -233,7 +235,7 @@ int send_csv_file(int client_socket, const char *filename) {
     log_err("Error opening CSV file");
   }
 
-  cs165_log(stdout, "opened csv file\n");
+  //   cs165_log(stdout, "opened csv file\n");
   char *line = NULL;
   size_t len = 0;
   ssize_t read;
@@ -249,7 +251,7 @@ int send_csv_file(int client_socket, const char *filename) {
   }
   line_count--;  // Subtract header line
 
-  cs165_log(stdout, "num of ints per colum: %zu\n", line_count);
+  //   cs165_log(stdout, "num of ints per colum: %zu\n", line_count);
 
   // Reset file pointer to beginning
   fseek(csv_file, 0, SEEK_SET);
@@ -258,10 +260,10 @@ int send_csv_file(int client_socket, const char *filename) {
   if ((read = getline(&line, &len, csv_file)) != -1) {
     char *token;
     trim_whitespace(line);
-    cs165_log(stdout, "header: %s\n", line);
+    // cs165_log(stdout, "header: %s\n", line);
     // populate columns array
     char **columns = extract_csv_columns(line, &column_count);
-    cs165_log(stdout, "%d columns found\n", column_count);
+    // cs165_log(stdout, "%d columns found\n", column_count);
 
     // Process CSV file column by column
     for (int i = 0; i < column_count; i++) {
@@ -272,7 +274,7 @@ int send_csv_file(int client_socket, const char *filename) {
       chunk.total_size =
           line_count * sizeof(int);  // Each column will contain 'line_count' integers
 
-      cs165_log(stdout, "sending column: %s\n", chunk.column_name);
+      //   cs165_log(stdout, "sending column: %s\n", chunk.column_name);
       // Send initial chunk with column information
       if (send(client_socket, &chunk, sizeof(CSVChunk), 0) == -1) {
         log_err("Error sending initial chunk");

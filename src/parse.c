@@ -299,33 +299,34 @@ DbOperator *parse_select(char *query_command, char *handle) {
   char *db_tbl_col_name = next_token(command_index, &status);
   if (status == INCORRECT_FORMAT) return NULL;
 
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  dbo->type = SELECT;
+  dbo->operator_fields.select_operator.comparator = malloc(sizeof(Comparator));
+
   char *low_str = next_token(command_index, &status);
   if (status == INCORRECT_FORMAT) {
     return NULL;
   }
-  long low_val = (strcmp(low_str, "null") == 0) ? LONG_MIN : atol(low_str);
-
-  char *high_str = next_token(command_index, &status);
-  if (status == INCORRECT_FORMAT) return NULL;
-  long high_val = (strcmp(high_str, "null") == 0) ? LONG_MAX : atol(high_str);
-
-  DbOperator *dbo = malloc(sizeof(DbOperator));
-  dbo->type = SELECT;
-  dbo->operator_fields.select_operator.comparator = malloc(sizeof(Comparator));
-  dbo->operator_fields.select_operator.comparator->p_low = low_val;
-  dbo->operator_fields.select_operator.comparator->p_high = high_val;
-
-  // Set comparison types based on input values
-  if (low_val == LONG_MIN) {
+  if (strcmp(low_str, "null") == 0) {
     dbo->operator_fields.select_operator.comparator->type1 = NO_COMPARISON;
   } else {
     dbo->operator_fields.select_operator.comparator->type1 = GREATER_THAN_OR_EQUAL;
+    dbo->operator_fields.select_operator.comparator->p_low = atol(low_str);
+    cs165_log(stdout, "parse_select: low_val: %ld\n",
+              dbo->operator_fields.select_operator.comparator->p_low);
   }
 
-  if (high_val == LONG_MAX) {
+  char *high_str = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) {
+    return NULL;
+  }
+  if (strcmp(high_str, "null") == 0) {
     dbo->operator_fields.select_operator.comparator->type2 = NO_COMPARISON;
   } else {
-    dbo->operator_fields.select_operator.comparator->type2 = LESS_THAN_OR_EQUAL;
+    dbo->operator_fields.select_operator.comparator->type2 = LESS_THAN;
+    dbo->operator_fields.select_operator.comparator->p_high = atol(high_str);
+    cs165_log(stdout, "parse_select: high_val: %ld\n",
+              dbo->operator_fields.select_operator.comparator->p_high);
   }
 
   // Try getting column from catalog manager
@@ -343,9 +344,6 @@ DbOperator *parse_select(char *query_command, char *handle) {
 
   // Initialize the handle field
   dbo->operator_fields.select_operator.comparator->handle = handle;
-
-  log_info("parse_select: column %s, low %ld, high %ld\n", db_tbl_col_name, low_val,
-           high_val);
 
   return dbo;
 }
