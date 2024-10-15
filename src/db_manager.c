@@ -8,11 +8,13 @@ Db *current_db;
 Status db_startup(void) {
   cs165_log(stdout, "Startup server\n");
   init_db_from_disk();
+  init_client_context();
   return (Status){OK, NULL};
 }
 
 Status db_shutdown(void) {
   shutdown_catalog_manager();
+  free_client_context();
   cs165_log(stdout, "Shutdown server\n");
   return (Status){OK, NULL};
 }

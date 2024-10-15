@@ -3,6 +3,8 @@
 
 #include "db.h"
 
+#define MAX_VARIABLES 100
+
 /*
  * an enum which allows us to differentiate between columns and results
  */
@@ -39,8 +41,16 @@ typedef struct ClientContext {
   GeneralizedColumnHandle *chandle_table;
   int chandles_in_use;
   int chandle_slots;
+  GeneralizedColumnHandle variable_pool[MAX_VARIABLES];
+  int variables_in_use;
 } ClientContext;
 
-Table *lookup_table(char *name);
+extern ClientContext *g_client_context;
+
+void init_client_context();
+ClientContext *get_client_context();
+void free_client_context();
+Status add_handle(const char *name, GeneralizedColumn *gen_col);
+GeneralizedColumn *get_handle(const char *name);
 
 #endif
