@@ -1,6 +1,7 @@
 #include "catalog_manager.h"
 
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <string.h>    // For strncpy
 #include <sys/stat.h>  // For mkdir
@@ -426,12 +427,13 @@ Status shutdown_catalog_manager(void) {
               "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%ld\n",
               col->name, col->num_elements, col->min_value, col->max_value);
 
-      // Continue existing routine to unmap the column data and close the file descriptor
+      // unmap the column data and close the file descriptor
       if (col->data) {
+        cs165_log(stdout, "Freeing memory for column %s\n", col->name);
         cs165_log(stdout, "first element: %d\n", ((int *)col->data)[0]);
         cs165_log(stdout, "last element: %d\n",
                   ((int *)col->data)[col->num_elements - 1]);
-        cs165_log(stdout, "Freeing memory for column %s\n", col->name);
+        cs165_log(stdout, "num_elements: %zu\n", col->num_elements);
         if (munmap(col->data, col->mmap_size) == -1) {
           log_err("Error unmapping memory");
         }

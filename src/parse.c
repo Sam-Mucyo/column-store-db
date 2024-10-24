@@ -241,10 +241,20 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
     query_command++;
     char **command_index = &query_command;
     // parse table input
-    char *table_name = next_token(command_index, &send_message->status);
+    char *db_tbl_name = next_token(command_index, &send_message->status);
     if (send_message->status == INCORRECT_FORMAT) {
       return NULL;
     }
+    // split db and table name
+    char *db_name = strsep(&db_tbl_name, ".");
+    char *table_name = db_tbl_name;
+    // check that the database argument is the current active database
+    if (!current_db || strcmp(current_db->name, db_name) != 0) {
+      cs165_log(stdout, "query unsupported. Bad db name\n");
+      send_message->status = OBJECT_NOT_FOUND;
+      return NULL;
+    }
+
     // lookup the table and make sure it exists.
     Table *insert_table = get_table_from_catalog(table_name);
     if (insert_table == NULL) {
@@ -486,6 +496,7 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
   // commands). Either way, you should track the dbo and free it when the variable is
   // no longer needed.
   DbOperator *dbo = NULL;  // = malloc(sizeof(DbOperator));
+  send_message->status = OK_WAIT_FOR_RESPONSE;
 
   if (strncmp(query_command, "--", 2) == 0) {
     send_message->status = OK_DONE;
@@ -514,12 +525,10 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
   // check what command is given.
   if (strncmp(query_command, "create", 6) == 0) {
     query_command += 6;
+    // TODO: Make all `parse_` function take in `send_message` and set the status there.
+    //  Currently, commands with just `INCORRECT_FORMAT` will be treated as
+    //  `UNKNOWN_COMMAND`
     dbo = parse_create(query_command);
-    if (dbo == NULL) {
-      send_message->status = INCORRECT_FORMAT;
-    } else {
-      send_message->status = OK_DONE;
-    }
   } else if (strncmp(query_command, "relational_insert", 17) == 0) {
     query_command += 17;
     dbo = parse_insert(query_command, send_message);
@@ -532,19 +541,13 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
   } else if (strncmp(query_command, "avg", 3) == 0) {
     query_command += 3;
     dbo = parse_avg(query_command, handle);
-  } else if (strncmp(query_command, "shutdown", 8) == 0) {
-    dbo = malloc(sizeof(DbOperator));
-    dbo->type = SHUTDOWN;
-    send_message->status = SERVER_SHUTDOWN;
   } else if (strncmp(query_command, "print", 5) == 0) {
     query_command += 5;
     dbo = parse_print(query_command);
   } else {
     send_message->status = UNKNOWN_COMMAND;
   }
-  if (dbo == NULL) {
-    return dbo;
-  }
+  if (dbo == NULL) return dbo;
 
   dbo->client_fd = client_socket;
   dbo->context = context;

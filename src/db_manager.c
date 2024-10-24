@@ -12,11 +12,10 @@ Status db_startup(void) {
   return (Status){OK, NULL};
 }
 
-Status db_shutdown(void) {
+void db_shutdown(void) {
   shutdown_catalog_manager();
   free_client_context();
   cs165_log(stdout, "Shutdown server\n");
-  return (Status){OK, NULL};
 }
 
 /**

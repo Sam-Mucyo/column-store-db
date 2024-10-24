@@ -26,6 +26,13 @@ typedef struct {
   char data[CSV_CHUNK_SIZE];
 } CSVChunk;
 
+typedef struct ColumnMetadata {
+  char name[MAX_SIZE_NAME];
+  size_t num_elements;
+  long min_value;
+  long max_value;
+  long sum;
+} ColumnMetadata;
 /**
  * DataType
  * Flag to mark what type of data is held in the struct.
@@ -54,19 +61,17 @@ typedef struct Status {
 // mesage_status defines the status of the previous request.
 // FEEL FREE TO ADD YOUR OWN OR REMOVE ANY THAT ARE UNUSED IN YOUR PROJECT
 typedef enum message_status {
+  INCOMING_QUERY,
   OK_DONE,
   OK_WAIT_FOR_RESPONSE,
   SERVER_SHUTDOWN,
-  CSV_TRANSFER_START,
-  CSV_TRANSFER_END,
+  CSV_TRANSFER,
   UNKNOWN_COMMAND,
   QUERY_UNSUPPORTED,
   OBJECT_ALREADY_EXISTS,
   OBJECT_NOT_FOUND,
   INCORRECT_FORMAT,
   EXECUTION_ERROR,
-  INCORRECT_FILE_FORMAT,
-  FILE_NOT_FOUND,
   INDEX_ALREADY_EXISTS
 } message_status;
 

@@ -16,6 +16,9 @@ not compile on the lab machine please look into this as a a source of error. */
  * For more information on unix sockets, refer to:
  * http://beej.us/guide/bgipc/output/html/multipage/unixsock.html
  **/
+#include <ctype.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -30,7 +33,7 @@ not compile on the lab machine please look into this as a a source of error. */
 #define DEFAULT_STDIN_BUFFER_SIZE 1024
 
 int connect_client(void);
-int send_csv_file(int client_socket, const char *filename);
+int send_column_data(int socket, const char *csv_filename);
 
 /**
  * Getting Started Hint:
@@ -62,8 +65,6 @@ int main(void) {
   // 1. output interactive marker
   // 2. read from stdin until eof.
   char read_buffer[DEFAULT_STDIN_BUFFER_SIZE];
-  send_message.payload = read_buffer;
-  send_message.status = 0;
 
   while (printf("%s", prefix),
          output_str = fgets(read_buffer, DEFAULT_STDIN_BUFFER_SIZE, stdin),
@@ -76,67 +77,80 @@ int main(void) {
     // Only process input that is greater than 1 character.
     // Convert to message and send the message and the
     // payload directly to the server.
-    send_message.length = strlen(read_buffer);
-    if (send_message.length > 1) {
-      // Check if the input is a load command
-      if (strncmp(read_buffer, "load(", 5) == 0) {
-        char filename[MAX_PATH_LEN];
-        sscanf(read_buffer, "load(\"%[^\"]\")", filename);
+    if (strlen(read_buffer) <= 1) continue;
 
-        // Send a special message to indicate CSV transfer
-        send_message.status = CSV_TRANSFER_START;
-        // cs165_log(stdout, "sending csv transfer start message\n");
-        if (send(client_socket, &send_message, sizeof(message), 0) == -1) {
-          log_err("Failed to send CSV transfer start message");
-          exit(1);
-        }
-
-        // cs165_log(stdout, "sending csv file\n");
-        if (send_csv_file(client_socket, filename) == -1) {
-          log_err("Failed to send CSV file");
-          exit(1);
-        }
-      } else {
-        // cs165_log(stdout, "sending message metadata\n");
-        // Send the message_header, which tells server payload size
-        if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
-          log_err("Failed to send message header.");
-          exit(1);
-        }
-
-        // cs165_log(stdout, "sending message payload:%s\n", send_message.payload);
-        // Send the payload (query) to server
-        if (send(client_socket, send_message.payload, send_message.length, 0) == -1) {
-          log_err("Failed to send query payload.");
-          exit(1);
-        }
+    if (strncmp(read_buffer, "shutdown", 8) == 0) {
+      send_message.status = SERVER_SHUTDOWN;
+      if (send(client_socket, &send_message, sizeof(message), 0) == -1) {
+        log_err("Failed to send shutdown message");
       }
+      exit(0);
+    }
 
-      // Always wait for server response (even if it is just an OK message)
-      if ((len = recv(client_socket, &(recv_message), sizeof(message), 0)) > 0) {
-        if ((recv_message.status == OK_WAIT_FOR_RESPONSE ||
-             recv_message.status == OK_DONE) &&
-            (int)recv_message.length > 0) {
-          // Calculate number of bytes in response package
-          int num_bytes = (int)recv_message.length;
-          char payload[num_bytes + 1];
+    // Check if the input is a load command
+    if (strncmp(read_buffer, "load(", 5) == 0) {
+      char filename[MAX_PATH_LEN];
+      sscanf(read_buffer, "load(\"%[^\"]\")", filename);
 
-          // Receive the payload and print it out
-          if ((len = recv(client_socket, payload, num_bytes, 0)) > 0) {
-            payload[num_bytes] = '\0';
-            if (strncmp(payload, "OK", 2) != 0) {
-              printf("\n%s\n", payload);
-            }
-          }
-        }
-      } else {
-        if (len < 0) {
-          log_err("Failed to receive message.");
-        } else {
-          log_info("-- Server closed connection\n");
-        }
+      send_message.status = CSV_TRANSFER;
+      // cs165_log(stdout, "sending csv transfer start message\n");
+      if (send(client_socket, &send_message, sizeof(message), 0) == -1) {
+        log_err("Failed to send CSV transfer start message");
         exit(1);
       }
+      // cs165_log(stdout, "sending csv file\n");
+      if (send_column_data(client_socket, filename) == -1) {
+        log_err("Failed to send CSV file");
+        exit(1);
+      }
+    } else {  // Should be an interesting query to leave to the server
+      send_message.length = strlen(read_buffer);
+      send_message.status = INCOMING_QUERY;
+      // Send the message_header, which tells server payload size
+      if (send(client_socket, &(send_message), sizeof(message), 0) == -1) {
+        log_err("Failed to send message header.");
+        exit(1);
+      }
+
+      send_message.payload = read_buffer;
+      //   cs165_log(stdout, "-- sending message payload:%s\n", send_message.payload);
+      // Send the payload (query) to server
+      if (send(client_socket, send_message.payload, send_message.length, 0) == -1) {
+        log_err("Failed to send query payload.");
+        exit(1);
+      }
+    }
+
+    // Always wait for server response (even if it is just an OK message)
+    if ((len = recv(client_socket, &(recv_message), sizeof(message), 0)) > 0) {
+      if ((recv_message.status == OK_WAIT_FOR_RESPONSE ||
+           recv_message.status == OK_DONE) &&
+          (int)recv_message.length > 0) {
+        // Calculate number of bytes in response package
+        int num_bytes = (int)recv_message.length;
+        char payload[num_bytes + 1];
+
+        // Receive the payload and print it out
+        if ((len = recv(client_socket, payload, num_bytes, 0)) > 0) {
+          payload[num_bytes] = '\0';
+          //   add "--" in front if it wasn't a `print` command, to avoid
+          // test output confusion. TODO: refactor to only have server send payload only
+          // if it was a `print` command otherwise, send just the status. (time
+          // permitting)
+          if (strncmp(read_buffer, "print", 5) != 0) {
+            printf("-- %s\n", payload);
+          } else {
+            printf("%s\n", payload);
+          }
+        }
+      }
+    } else {
+      if (len < 0) {
+        log_err("Failed to receive message.");
+      } else {
+        log_info("-- Server closed connection\n");
+      }
+      exit(1);
     }
   }
   close(client_socket);
@@ -207,9 +221,15 @@ char **extract_csv_columns(const char *header, int *num_columns) {
       return NULL;
     }
 
-    // Copy the token to the column name
-    strncpy(columns[count], token, MAX_SIZE_NAME);
-    columns[count][MAX_SIZE_NAME - 1] = '\0';  // Ensure null-termination
+    // Copy the token to the column name; avoid including
+    int i = 0;
+    while (i < MAX_SIZE_NAME - 1 && token[i] != '\0' && !isspace(token[i])) {
+      columns[count][i] = token[i];
+      i++;
+    }
+    columns[count][i] = '\0';  // Ensure null-termination
+
+    cs165_log(stdout, "column %d: %s\n", count, columns[count]);
 
     count++;
     token = strtok(NULL, ",");
@@ -220,128 +240,106 @@ char **extract_csv_columns(const char *header, int *num_columns) {
 }
 
 /**
- * @brief send_csv_file
- * Sends a CSV file to the server in chunks (currently assumes int data type)
+ * @brief send_column_data
+ * Sends column data to the server
  *
- * @param client_socket
- * @param filename
+ * @param socket
+ * @param csv_filename
  * @return int
  */
-int send_csv_file(int client_socket, const char *filename) {
-  // Open CSV file
-  FILE *csv_file = fopen(filename, "r");
-  if (!csv_file) {
+int send_column_data(int socket, const char *csv_filename) {
+  FILE *file = fopen(csv_filename, "r");
+  if (!file) {
     log_err("Error opening CSV file");
+    return -1;
   }
 
-  //   cs165_log(stdout, "opened csv file\n");
   char *line = NULL;
   size_t len = 0;
   ssize_t read;
 
-  // Array to store column names
-  char *columns[MAX_COLUMNS] = {0};
-  int column_count = 0;
+  // Read header
+  getline(&line, &len, file);
+  int num_columns = 0;
+  char **column_names = extract_csv_columns(line, &num_columns);
+  cs165_log(stdout, "num of columns: %d\n", num_columns);
 
-  // Count the number of lines (excluding header)
-  size_t line_count = 0;
-  while ((read = getline(&line, &len, csv_file)) != -1) {
-    line_count++;
+  int **column_data = malloc(num_columns * sizeof(int *));
+  size_t *column_sizes = calloc(num_columns, sizeof(size_t));
+
+  // count rows and allocate memory
+  size_t num_rows = 0;
+  while ((read = getline(&line, &len, file)) != -1) num_rows++;
+  cs165_log(stdout, "num of rows: %zu\n", num_rows);
+
+  ColumnMetadata *metadata = malloc(num_columns * sizeof(ColumnMetadata));
+  for (int i = 0; i < num_columns; i++) {
+    strncpy(metadata[i].name, column_names[i], MAX_SIZE_NAME - 1);
+    metadata[i].name[MAX_SIZE_NAME - 1] = '\0';  // Ensure null-termination
+    metadata[i].num_elements = 0;
+    metadata[i].min_value = INT_MAX;
+    metadata[i].max_value = INT_MIN;
+    column_data[i] = malloc(num_rows * sizeof(int));
   }
-  line_count--;  // Subtract header line
 
-  //   cs165_log(stdout, "num of ints per colum: %zu\n", line_count);
+  // read data and calculate metadata
+  fseek(file, 0, SEEK_SET);
+  getline(&line, &len, file);  // Skip header
+  while ((read = getline(&line, &len, file)) != -1) {
+    char *token = strtok(line, ",");
+    for (int i = 0; i < num_columns; i++) {
+      int value = atoi(token);
+      column_data[i][column_sizes[i]] = value;
 
-  // Reset file pointer to beginning
-  fseek(csv_file, 0, SEEK_SET);
+      // Update metadata
+      if (column_sizes[i] == 0 || value < metadata[i].min_value)
+        metadata[i].min_value = value;
+      if (column_sizes[i] == 0 || value > metadata[i].max_value)
+        metadata[i].max_value = value;
+      metadata[i].sum += value;
 
-  // Read header to determine the number of columns
-  if ((read = getline(&line, &len, csv_file)) != -1) {
-    char *token;
-    trim_whitespace(line);
-    // cs165_log(stdout, "header: %s\n", line);
-    // populate columns array
-    char **columns = extract_csv_columns(line, &column_count);
-    // cs165_log(stdout, "%d columns found\n", column_count);
-
-    // Process CSV file column by column
-    for (int i = 0; i < column_count; i++) {
-      CSVChunk chunk;
-      memset(&chunk, 0, sizeof(CSVChunk));
-      strncpy(chunk.column_name, columns[i], sizeof(chunk.column_name) - 1);
-      chunk.column_name[sizeof(chunk.column_name) - 1] = '\0';  // Ensure null-termination
-      chunk.total_size =
-          line_count * sizeof(int);  // Each column will contain 'line_count' integers
-
-      //   cs165_log(stdout, "sending column: %s\n", chunk.column_name);
-      // Send initial chunk with column information
-      if (send(client_socket, &chunk, sizeof(CSVChunk), 0) == -1) {
-        log_err("Error sending initial chunk");
-      }
-
-      // Reset chunk size for the new column
-      chunk.chunk_size = 0;
-
-      // Reset file pointer and skip the header
-      fseek(csv_file, 0, SEEK_SET);
-      getline(&line, &len, csv_file);  // Skip the header line
-
-      // Read and send data for the current column
-      while ((read = getline(&line, &len, csv_file)) != -1) {
-        token = strtok(line, ",");
-        for (int j = 0; j < i; j++) {
-          token = strtok(NULL, ",");  // Move to the current column value
-        }
-
-        if (token != NULL) {
-          int value = atoi(token);  // Convert the token to an integer
-
-          // Check if the current chunk is full
-          if (chunk.chunk_size + sizeof(int) > CSV_CHUNK_SIZE) {
-            // Send the current chunk
-            if (send(client_socket, &chunk, sizeof(CSVChunk), 0) == -1) {
-              log_err("Error sending chunk");
-            }
-            // Reset chunk size for the next set of data
-            chunk.chunk_size = 0;
-          }
-
-          // Copy the value into the chunk's data array
-          memcpy(chunk.data + chunk.chunk_size, &value, sizeof(int));
-          chunk.chunk_size += sizeof(int);
-        }
-      }
-
-      // Send any remaining data in the last chunk
-      if (chunk.chunk_size > 0) {
-        if (send(client_socket, &chunk, sizeof(CSVChunk), 0) == -1) {
-          log_err("Error sending last chunk");
-        }
-      }
-    }
-
-    // Send end of transmission signal
-    CSVChunk end_chunk;
-    memset(&end_chunk, 0, sizeof(CSVChunk));
-    strcpy(end_chunk.column_name, "END_TRANSMISSION");
-    if (send(client_socket, &end_chunk, sizeof(CSVChunk), 0) == -1) {
-      log_err("Error sending END_TRANSMISSION signal");
+      column_sizes[i]++;
+      token = strtok(NULL, ",");
     }
   }
+  cs165_log(stdout, "Finished reading data\n");
 
-  // Clean up
-  fclose(csv_file);
-  if (line) {
-    free(line);
-  }
+  // Send data for each column
+  for (int i = 0; i < num_columns; i++) {
+    metadata[i].num_elements = column_sizes[i];
+    // log_info("Sending column %s\nWith Stats:\n\tmin: %ld\n\tmax: %ld\n\tsum: %ld\n",
+    //          metadata[i].name, metadata[i].min_value, metadata[i].max_value,
+    //          metadata[i].sum);
 
-  // Free column memory
-  for (int i = 0; i < column_count; i++) {
-    if (columns[i]) {
-      free(columns[i]);
+    if (send(socket, &metadata[i], sizeof(ColumnMetadata), 0) == -1) {
+      log_err("Error sending metadata for column %s with error %s\n", metadata[i].name,
+              strerror(errno));
+      return -1;
+    }
+    if (send(socket, column_data[i], column_sizes[i] * sizeof(int), 0) == -1) {
+      log_err("Error sending data for column %s with error %s\n", metadata[i].name,
+              strerror(errno));
+      return -1;
     }
   }
-  //   printf("Client finished sending data\n");
+  // send end of transmission signal
+  ColumnMetadata end_metadata = {0};
+  if (send(socket, &end_metadata, sizeof(ColumnMetadata), 0) == -1) {
+    log_err("Error sending end of transmission signal with error %s\n", strerror(errno));
+    return -1;
+  }
 
+  // Cleanup
+  for (int i = 0; i < num_columns; i++) {
+    free(column_data[i]);
+    free(column_names[i]);
+  }
+  free(column_data);
+  free(column_names);
+  free(metadata);
+  free(column_sizes);
+
+  fclose(file);
+  log_info("Client finished sending data\n");
   return 0;
 }
