@@ -104,7 +104,7 @@ void handle_client(int client_socket, int *shutdown) {
       //    Corresponding database operator is executed over the query
       // TODO: Make the `execute_DbOperator` return a `message` struct, the status
       // depends on the query
-      if (query) execute_DbOperator(query, &send_message);
+      if (query) handle_dbOperator(query, &send_message);
     }
 
     // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
@@ -302,4 +302,3 @@ int receive_columns(int socket) {
 
   return 0;
 }
-

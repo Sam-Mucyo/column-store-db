@@ -3,6 +3,6 @@
 
 #include "operators.h"
 
-void execute_DbOperator(DbOperator *query, message *send_message);
+void handle_dbOperator(DbOperator *query, message *send_message);
 
 #endif /* QUERY_HANDLER_H */

@@ -133,13 +133,10 @@ int main(void) {
         // Receive the payload and print it out
         if ((len = recv(client_socket, payload, num_bytes, 0)) > 0) {
           payload[num_bytes] = '\0';
-          //   add "--" in front if it wasn't a `print` command, to avoid
-          // test output confusion. TODO: refactor to only have server send payload only
+          // TODO: refactor to only have server send payload only
           // if it was a `print` command otherwise, send just the status. (time
           // permitting)
-          if (strncmp(read_buffer, "print", 5) != 0) {
-            printf("-- %s\n", payload);
-          } else {
+          if (strncmp(read_buffer, "print", 5) == 0) {
             printf("%s\n", payload);
           }
         }
