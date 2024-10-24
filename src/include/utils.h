@@ -57,4 +57,7 @@ void log_err(const char *format, ...);
 // Usage: log_info("Command received: %s", command_string);
 void log_info(const char *format, ...);
 
+int *extend_and_update_mmap(int *mapped_addr, size_t *current_size, size_t offset,
+                            const int *new_values, size_t count);
+
 #endif /* __UTILS_H__ */

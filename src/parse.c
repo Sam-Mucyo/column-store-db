@@ -241,10 +241,20 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
     query_command++;
     char **command_index = &query_command;
     // parse table input
-    char *table_name = next_token(command_index, &send_message->status);
+    char *db_tbl_name = next_token(command_index, &send_message->status);
     if (send_message->status == INCORRECT_FORMAT) {
       return NULL;
     }
+    // split db and table name
+    char *db_name = strsep(&db_tbl_name, ".");
+    char *table_name = db_tbl_name;
+    // check that the database argument is the current active database
+    if (!current_db || strcmp(current_db->name, db_name) != 0) {
+      cs165_log(stdout, "query unsupported. Bad db name\n");
+      send_message->status = OBJECT_NOT_FOUND;
+      return NULL;
+    }
+
     // lookup the table and make sure it exists.
     Table *insert_table = get_table_from_catalog(table_name);
     if (insert_table == NULL) {
