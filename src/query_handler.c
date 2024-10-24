@@ -1,12 +1,17 @@
 #include "query_handler.h"
 
+#include <string.h>
+
 #include "catalog_manager.h"
 #include "client_context.h"
+#include "operators.h"
 #include "utils.h"
-Status exec_select(DbOperator *query);
-Status exec_fetch(DbOperator *query);
-Status exec_avg(DbOperator *query);
-Status exec_print(DbOperator *query);
+
+void exec_select(DbOperator *query, message *send_message);
+void exec_fetch(DbOperator *query, message *send_message);
+void exec_avg(DbOperator *query, message *send_message);
+void exec_insert(DbOperator *query, message *send_message);
+void exec_print(DbOperator *query, message *send_message);
 
 /**
  * @brief execute_DbOperator
@@ -15,18 +20,12 @@ Status exec_print(DbOperator *query);
  * @param query (DbOperator*): the query to execute on the database
  * @return char*
  */
-char *execute_DbOperator(DbOperator *query) {
-  if (!query) {
-    cs165_log(stdout, "query executor received a null query.\n");
-    return " ";
-  }
-  char *res_msg = "executing query";
+void execute_DbOperator(DbOperator *query, message *send_message) {
   switch (query->type) {
-    case SHUTDOWN:
-      db_shutdown();
-      res_msg = "Db shutdown.";
-      break;
-    case CREATE:
+    case CREATE: {
+      // TODO: Make `create_` functions take in `send_message` and set the status there.
+      //   Just for consistency and cleaner code.
+      char *res_msg = NULL;
       if (query->operator_fields.create_operator.create_type == _DB) {
         if (create_db(query->operator_fields.create_operator.name).code == OK) {
           res_msg = "-- Database created.";
@@ -55,46 +54,31 @@ char *execute_DbOperator(DbOperator *query) {
           res_msg = "Column creation failed.";
         }
       }
+      send_message->status = OK_DONE;
+      send_message->length = strlen(res_msg);
+      send_message->payload = res_msg;
+    } break;
+
+    case SELECT:
+      exec_select(query, send_message);
       break;
-
-    case SELECT: {
-      cs165_log(stdout, "Executing select query.\n");
-      Status select_status = exec_select(query);
-      if (select_status.code == OK) {  // TODO: cleanup this code duplication
-        res_msg = "OK";
-      } else {
-        res_msg = select_status.error_message;
-      }
-    } break;
-
-    case FETCH: {
-      Status fetch_status = exec_fetch(query);
-      if (fetch_status.code == OK) {
-        res_msg = "OK";
-      } else {
-        res_msg = fetch_status.error_message;
-      }
-    } break;
-
-    case PRINT: {
-      res_msg = exec_print(query).error_message;
-    } break;
-
-    case AVG: {
-      Status avg_status = exec_avg(query);
-      if (avg_status.code == OK) {
-        res_msg = "OK";
-      } else {
-        res_msg = avg_status.error_message;
-      }
-    } break;
-
+    case FETCH:
+      exec_fetch(query, send_message);
+      break;
+    case PRINT:
+      exec_print(query, send_message);
+      break;
+    case AVG:
+      exec_avg(query, send_message);
+      break;
+    case INSERT:
+      exec_insert(query, send_message);
+      break;
     default:
-      cs165_log(stdout, "query was correctly parsed, but not handled by Executor.\n");
+      cs165_log(stdout, "execute_DbOperator: Unknown query type\n");
       break;
   }
   db_operator_free(query);
-  return res_msg;
 }
 
 int compare(ComparatorType type, long int p, int value) {
@@ -124,16 +108,16 @@ int compare(ComparatorType type, long int p, int value) {
  * @param query (DbOperator*): a DbOperator of type SELECT.
  * @return Status
  */
-Status exec_select(DbOperator *query) {
-  Status status = {OK, NULL};
+void exec_select(DbOperator *query, message *send_message) {
   SelectOperator *select_op = &query->operator_fields.select_operator;
   Comparator *comparator = select_op->comparator;
   GeneralizedColumn *gen_col = comparator->gen_col;
 
   if (gen_col->column_type != COLUMN) {
-    status.code = ERROR;
-    status.error_message = "Select operation is only supported on columns";
-    return status;
+    send_message->status = QUERY_UNSUPPORTED;
+    send_message->payload = "exec_select: select operator only supports column type";
+    send_message->length = strlen(send_message->payload);
+    return;
   }
 
   Column *column = gen_col->column_pointer.column;
@@ -150,7 +134,8 @@ Status exec_select(DbOperator *query) {
 
     // cs165_log(stdout, "comparing value %d with low %ld and high %ld\n", value,
     //           comparator->p_low, comparator->p_high);
-    // cs165_log(stdout, "Type1: %d, Type2: %d\n", comparator->type1, comparator->type2);
+    // cs165_log(stdout, "Type1: %d, Type2: %d\n", comparator->type1,
+    // comparator->type2);
     if (comparator->type1 == NO_COMPARISON && comparator->type2 != NO_COMPARISON &&
         compare(comparator->type2, comparator->p_high, value)) {
       include = true;
@@ -207,9 +192,10 @@ Status exec_select(DbOperator *query) {
   if (g_client_context->variables_in_use >= MAX_VARIABLES) {
     free(result->payload);
     free(result);
-    status.code = ERROR;
-    status.error_message = "Maximum number of variables reached";
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Maximum number of variables reached";
+    send_message->length = strlen(send_message->payload);
+    return;
   }
 
   GeneralizedColumnHandle *handle =
@@ -222,28 +208,37 @@ Status exec_select(DbOperator *query) {
 
   // If a handle was provided in the query, update the chandle_table
   if (comparator->handle != NULL) {
-    status = add_handle(comparator->handle, &handle->generalized_column);
-    if (status.code != OK) {
-      return status;
+    if (add_handle(comparator->handle, &handle->generalized_column).code != OK) {
+      free(result->payload);
+      free(result);
+      send_message->status = EXECUTION_ERROR;
+      send_message->payload = "Failed to add handle to chandle_table";
+      send_message->length = strlen(send_message->payload);
+      return;
     }
   }
   //   Add logging info
-  log_info("Select operation completed successfully.\n");
-  return status;
+  log_info("exec_select: Selection operation completed successfully.\n");
+
+  //   set send_message
+  send_message->status = OK_DONE;
+  send_message->payload = "Done";
+  send_message->length = strlen(send_message->payload);
+  return;
 }
 
-Status exec_fetch(DbOperator *query) {
+void exec_fetch(DbOperator *query, message *send_message) {
   cs165_log(stdout, "Executing fetch query.\n");
-  Status status = {OK, NULL};
   FetchOperator *fetch_op = &query->operator_fields.fetch_operator;
 
   // Get the Result from the select handle
   GeneralizedColumn *select_gen_col = get_handle(fetch_op->select_handle);
   if (!select_gen_col || select_gen_col->column_type != RESULT) {
-    status.code = ERROR;
-    status.error_message = "Invalid select handle or not a Result type";
-    log_err("L%d in exec_fetch: %s\n", __LINE__, status.error_message);
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Invalid select handle or not a Result type";
+    send_message->length = strlen(send_message->payload);
+    log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
+    return;
   }
 
   cs165_log(stdout, "Got select handle from variable pool/client context.\n");
@@ -253,30 +248,33 @@ Status exec_fetch(DbOperator *query) {
   // Get the Column to fetch from
   Column *fetch_col = fetch_op->col;
   if (!fetch_col) {
-    status.code = ERROR;
-    status.error_message = "Invalid fetch column";
-    log_err("L%d in exec_fetch: %s\n", __LINE__, status.error_message);
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Invalid fetch column";
+    send_message->length = strlen(send_message->payload);
+    log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
+    return;
   }
   cs165_log(stdout, "Got fetch column from catalog.\n");
 
   // Create a new Result to store the fetched values
   Result *fetch_result = malloc(sizeof(Result));
   if (!fetch_result) {
-    status.code = ERROR;
-    status.error_message = "Failed to allocate memory for fetch result";
-    log_err("L%d in exec_fetch: %s\n", __LINE__, status.error_message);
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Failed to allocate memory for fetch result";
+    send_message->length = strlen(send_message->payload);
+    log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
+    return;
   }
 
   fetch_result->num_tuples = select_result->num_tuples;
   fetch_result->payload = malloc(sizeof(int) * fetch_result->num_tuples);
   fetch_result->data_type = INT;
   if (!fetch_result->payload) {
-    status.code = ERROR;
-    status.error_message = "Failed to allocate memory for fetch result payload";
-    log_err("L%d in exec_fetch: %s\n", __LINE__, status.error_message);
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Failed to allocate memory for fetch result payload";
+    send_message->length = strlen(send_message->payload);
+    log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
+    return;
   }
 
   // Fetch the values
@@ -286,9 +284,11 @@ Status exec_fetch(DbOperator *query) {
     if (index >= fetch_col->num_elements) {
       free(fetch_result->payload);
       free(fetch_result);
-      status.code = ERROR;
-      status.error_message = "Index out of bounds in fetch operation";
-      return status;
+      send_message->status = EXECUTION_ERROR;
+      send_message->payload = "Index out of bounds in fetch operation";
+      send_message->length = strlen(send_message->payload);
+      log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
+      return;
     }
     // cs165_log(stdout, "%d ", fetch_col->data[index]);
     ((int *)fetch_result->payload)[i] = fetch_col->data[index];
@@ -299,10 +299,11 @@ Status exec_fetch(DbOperator *query) {
   if (g_client_context->variables_in_use >= MAX_VARIABLES) {
     free(fetch_result->payload);
     free(fetch_result);
-    status.code = ERROR;
-    status.error_message = "Maximum number of variables reached";
-    log_err("L%d in exec_fetch: %s\n", __LINE__, status.error_message);
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Maximum number of variables reached";
+    send_message->length = strlen(send_message->payload);
+    log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
+    return;
   }
 
   GeneralizedColumnHandle *handle =
@@ -314,34 +315,40 @@ Status exec_fetch(DbOperator *query) {
   g_client_context->variables_in_use++;
 
   // Add the new handle to the chandle_table
-  status = add_handle(fetch_op->fetch_handle, &handle->generalized_column);
-  if (status.code != OK) {
-    return status;
+  if (add_handle(fetch_op->fetch_handle, &handle->generalized_column).code != OK) {
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Server Failed to add handle to chandle_table";
+    send_message->length = strlen(send_message->payload);
+    log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
   }
 
   log_info("Fetch operation completed successfully.\n");
-  return status;
+  send_message->status = OK_DONE;
+  send_message->payload = "Done";
+  send_message->length = strlen(send_message->payload);
+  return;
 }
 
-Status exec_print(DbOperator *query) {
-  Status status = {OK, NULL};
+void exec_print(DbOperator *query, message *send_message) {
   PrintOperator *print_op = &query->operator_fields.print_operator;
 
   // Get the GeneralizedColumn from the handle
   GeneralizedColumn *gen_col = get_handle(print_op->handle_to_print);
   if (!gen_col) {
-    status.code = ERROR;
-    status.error_message = "Invalid handle for print operation";
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Invalid handle for print operation";
+    send_message->length = strlen(send_message->payload);
+    return;
   }
 
   // Allocate an initial buffer for the result string
   size_t buffer_size = 1024;  // Initial size, will be increased if needed
   char *result_string = malloc(buffer_size);
   if (!result_string) {
-    status.code = ERROR;
-    status.error_message = "Memory allocation failed";
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Memory allocation failed";
+    send_message->length = strlen(send_message->payload);
+    return;
   }
   size_t current_pos = 0;
 
@@ -356,9 +363,10 @@ Status exec_print(DbOperator *query) {
           char *new_buffer = realloc(result_string, buffer_size);
           if (!new_buffer) {
             free(result_string);
-            status.code = ERROR;
-            status.error_message = "Memory reallocation failed";
-            return status;
+            send_message->status = EXECUTION_ERROR;
+            send_message->payload = "Memory reallocation failed";
+            send_message->length = strlen(send_message->payload);
+            return;
           }
           result_string = new_buffer;
         }
@@ -377,9 +385,10 @@ Status exec_print(DbOperator *query) {
           current_pos += chars_written;
         } else {
           free(result_string);
-          status.code = ERROR;
-          status.error_message = "Unknown data type for print operation";
-          return status;
+          send_message->status = EXECUTION_ERROR;
+          send_message->payload = "Unknown data type for print operation";
+          send_message->length = strlen(send_message->payload);
+          return;
         }
       }
       break;
@@ -393,9 +402,10 @@ Status exec_print(DbOperator *query) {
           char *new_buffer = realloc(result_string, buffer_size);
           if (!new_buffer) {
             free(result_string);
-            status.code = ERROR;
-            status.error_message = "Memory reallocation failed";
-            return status;
+            send_message->status = EXECUTION_ERROR;
+            send_message->payload = "Memory reallocation failed";
+            send_message->length = strlen(send_message->payload);
+            return;
           }
           result_string = new_buffer;
         }
@@ -409,9 +419,10 @@ Status exec_print(DbOperator *query) {
     }
     default: {
       free(result_string);
-      status.code = ERROR;
-      status.error_message = "Unknown column type for print operation";
-      return status;
+      send_message->status = EXECUTION_ERROR;
+      send_message->payload = "Unknown column type for print operation";
+      send_message->length = strlen(send_message->payload);
+      return;
     }
   }
 
@@ -419,13 +430,14 @@ Status exec_print(DbOperator *query) {
   result_string[current_pos] = '\0';
 
   // Store the result string in the status
-  status.error_message = result_string;
+  send_message->payload = result_string;
+  send_message->length = strlen(send_message->payload);
 
   log_info("Print operation completed successfully.\n");
-  return status;
+  return;
 }
 
-Status exec_avg(DbOperator *query) {
+void exec_avg(DbOperator *query, message *send_message) {
   cs165_log(stdout, "Executing avg query:\navg_handle: %s\nfetch_handle: %s\n",
             query->operator_fields.avg_operator.avg_handle,
             query->operator_fields.avg_operator.fetch_handle);
@@ -435,9 +447,11 @@ Status exec_avg(DbOperator *query) {
   // Get the Column from the fetch handle
   GeneralizedColumn *fetch_gen_col = get_handle(avg_op->fetch_handle);
   if (!fetch_gen_col || fetch_gen_col->column_type != RESULT) {
-    status.code = ERROR;
-    status.error_message = "Invalid fetch handle or not a Result type";
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Invalid fetch handle or not a Result type";
+    log_err("L%d in exec_avg: %s\n", __LINE__, send_message->payload);
+    send_message->length = strlen(send_message->payload);
+    return;
   }
 
   Result *fetch_result = fetch_gen_col->column_pointer.result;
@@ -454,17 +468,19 @@ Status exec_avg(DbOperator *query) {
   Result *avg_result = malloc(sizeof(Result));
   avg_result->data_type = FLOAT;
   if (!avg_result) {
-    status.code = ERROR;
-    status.error_message = "Memory allocation failed for avg_result";
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Memory allocation failed for avg_result";
+    send_message->length = strlen(send_message->payload);
+    return;
   }
   avg_result->num_tuples = 1;
   avg_result->payload = malloc(sizeof(double));
   if (!avg_result->payload) {
     free(avg_result);
-    status.code = ERROR;
-    status.error_message = "Memory allocation failed for avg_result payload";
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Memory allocation failed for avg_result payload";
+    send_message->length = strlen(send_message->payload);
+    return;
   }
   *((double *)avg_result->payload) = average;
 
@@ -472,9 +488,10 @@ Status exec_avg(DbOperator *query) {
   if (g_client_context->variables_in_use >= MAX_VARIABLES) {
     free(avg_result->payload);
     free(avg_result);
-    status.code = ERROR;
-    status.error_message = "Maximum number of variables reached";
-    return status;
+    send_message->status = EXECUTION_ERROR;
+    send_message->payload = "Maximum number of variables reached";
+    send_message->length = strlen(send_message->payload);
+    return;
   }
 
   GeneralizedColumnHandle *handle =
@@ -490,9 +507,11 @@ Status exec_avg(DbOperator *query) {
   if (status.code != OK) {
     free(avg_result->payload);
     free(avg_result);
-    return status;
+    return;
   }
 
   log_info("Average operation completed successfully. Average: %f\n", average);
-  return status;
+  return;
+}
+
 }

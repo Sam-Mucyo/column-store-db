@@ -23,8 +23,10 @@ typedef struct Column {
   int disk_fd;
   //   void *index;
   size_t num_elements;  // can be derived from mmap_size (clean up later)
+  // Stat metrics
   long min_value;
   long max_value;
+  long sum;
 
 } Column;
 
@@ -74,6 +76,6 @@ extern Db *current_db;
  */
 Status db_startup(void);
 
-Status db_shutdown(void);
+void db_shutdown(void);
 
 #endif  // DB_H

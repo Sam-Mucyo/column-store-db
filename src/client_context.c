@@ -6,12 +6,12 @@
 
 #include "utils.h"
 
-ClientContext* g_client_context = NULL;
+ClientContext *g_client_context = NULL;
 
 // Initialize the global ClientContext
-void init_client_context() {
+void init_client_context(void) {
   if (g_client_context == NULL) {
-    g_client_context = (ClientContext*)malloc(sizeof(ClientContext));
+    g_client_context = (ClientContext *)malloc(sizeof(ClientContext));
     g_client_context->chandle_table = NULL;
     g_client_context->chandles_in_use = 0;
     g_client_context->chandle_slots = 0;
@@ -20,10 +20,10 @@ void init_client_context() {
 }
 
 // Get the global ClientContext
-ClientContext* get_client_context() { return g_client_context; }
+ClientContext *get_client_context(void) { return g_client_context; }
 
 // Free the global ClientContext
-void free_client_context() {
+void free_client_context(void) {
   log_info("Freeing client context\n");
   cs165_log(stdout, "a preview of handles and their names\n");
   for (int i = 0; i < g_client_context->chandles_in_use; i++) {
@@ -37,7 +37,7 @@ void free_client_context() {
 }
 
 // Add a new handle to the chandle_table
-Status add_handle(const char* name, GeneralizedColumn* gen_col) {
+Status add_handle(const char *name, GeneralizedColumn *gen_col) {
   Status status = {OK, NULL};
 
   if (g_client_context->chandles_in_use >= g_client_context->chandle_slots) {
@@ -54,7 +54,7 @@ Status add_handle(const char* name, GeneralizedColumn* gen_col) {
     g_client_context->chandle_slots = new_size;
   }
 
-  GeneralizedColumnHandle* chandle =
+  GeneralizedColumnHandle *chandle =
       &g_client_context->chandle_table[g_client_context->chandles_in_use];
   strncpy(chandle->name, name, HANDLE_MAX_SIZE);
   chandle->generalized_column = *gen_col;
@@ -64,7 +64,7 @@ Status add_handle(const char* name, GeneralizedColumn* gen_col) {
 }
 
 // Get a handle from the chandle_table
-GeneralizedColumn* get_handle(const char* name) {
+GeneralizedColumn *get_handle(const char *name) {
   // use most recent handle
   for (int i = g_client_context->chandles_in_use - 1; i >= 0; i--) {
     if (strcmp(g_client_context->chandle_table[i].name, name) == 0) {
