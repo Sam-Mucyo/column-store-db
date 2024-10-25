@@ -1,0 +1,12 @@
+CompileFlags:
+  Add: 
+    - -Iinclude
+    - -Wall
+    - -Wextra 
+    - -pedantic 
+    - -fsanitize=address 
+    - -fsanitize=undefined 
+    - -fsanitize=leak 
+    - -fsanitize=pointer-subtract 
+    - -fsanitize=pointer-compare
+
