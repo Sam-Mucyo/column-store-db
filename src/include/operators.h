@@ -70,15 +70,15 @@ typedef struct LoadOperator {
  * A comparator defines a comparison operation over a column.
  **/
 typedef struct Comparator {
+  Column *col;      // the column to compare against.
   long int p_low;   // used in equality and ranges.
   long int p_high;  // used in range compares.
-  GeneralizedColumn *gen_col;
   ComparatorType type1;
   ComparatorType type2;
-  char *handle;
 } Comparator;
 
 typedef struct SelectOperator {
+  char *res_handle;
   Comparator *comparator;
 } SelectOperator;
 

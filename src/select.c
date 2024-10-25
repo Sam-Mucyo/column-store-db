@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "client_context.h"
 #include "operators.h"
 #include "query_exec.h"
 #include "utils.h"
@@ -23,64 +24,42 @@ size_t select_values_basic(const int *data, size_t num_elements, ComparatorType 
 void exec_select(DbOperator *query, message *send_message) {
   SelectOperator *select_op = &query->operator_fields.select_operator;
   Comparator *comparator = select_op->comparator;
-  GeneralizedColumn *gen_col = comparator->gen_col;
+  Column *column = comparator->col;
 
-  if (gen_col->column_type != COLUMN) {
-    send_message->status = QUERY_UNSUPPORTED;
-    send_message->payload = "exec_select: select operator only supports column type";
-    send_message->length = strlen(send_message->payload);
+  // Create a new Column to store the result indices
+  Column *result;
+  if (create_new_handle(select_op->res_handle, &result) != 0) {
+    log_err("exec_select: Failed to create new handle\n");
+    send_message->status = EXECUTION_ERROR;
+    send_message->length = 0;
+    send_message->payload = NULL;
     return;
   }
-  Column *column = gen_col->column_pointer.column;
+  result->data_type = INT;  // Select returns an array of indices/integers
 
-  // Create a new Result to store the selection result
-  Result *result = malloc(sizeof(Result));
-  result->data_type = INT;
-  result->num_tuples = 0;
-
+  // Allocate memory for the result data
   //   For simplicity, we will allocate the maximum possible size (for now).
   //   TODO: replace this with a dynamic array after implementing such a data structure.
-  result->payload = malloc(sizeof(int) * column->num_elements);
-
-  cs165_log(stdout, "exec_select: Starting to scan\n");
-  result->num_tuples = select_values_basic(
-      column->data, column->num_elements, comparator->type1, comparator->p_low,
-      comparator->type2, comparator->p_high, result->payload);
-
-  cs165_log(stdout, "Selected %d indices: \n", result->num_tuples);
-  for (size_t i = 0; i < result->num_tuples; i++) {
-    printf("%d, ", ((int *)result->payload)[i]);
-  }
-  printf("\n");
-
-  if (g_client_context->variables_in_use >= MAX_VARIABLES) {
-    free(result->payload);
-    free(result);
+  result->data = malloc(sizeof(int) * column->num_elements);
+  if (!result->data) {
+    log_err("exec_select: Failed to allocate memory for result data\n");
     send_message->status = EXECUTION_ERROR;
-    send_message->payload = "Maximum number of variables reached";
-    send_message->length = strlen(send_message->payload);
+    send_message->length = 0;
+    send_message->payload = NULL;
     return;
   }
 
-  GeneralizedColumnHandle *handle =
-      &g_client_context->variable_pool[g_client_context->variables_in_use];
-  snprintf(handle->name, HANDLE_MAX_SIZE, "%s", comparator->handle);
-  handle->generalized_column.column_type = RESULT;
-  handle->generalized_column.column_pointer.result = result;
+  cs165_log(stdout, "exec_select: Starting to scan\n");
+  result->num_elements = select_values_basic(
+      column->data, column->num_elements, comparator->type1, comparator->p_low,
+      comparator->type2, comparator->p_high, result->data);
 
-  g_client_context->variables_in_use++;
+  //   cs165_log(stdout, "Selected %d indices: \n", result->num_elements);
+  //   for (size_t i = 0; i < result->num_elements; i++) {
+  //     printf("%d, ", ((int *)result->data)[i]);
+  //   }
+  printf("\n");
 
-  // If a handle was provided in the query, update the chandle_table
-  if (comparator->handle != NULL) {
-    if (add_handle(comparator->handle, &handle->generalized_column).code != OK) {
-      free(result->payload);
-      free(result);
-      send_message->status = EXECUTION_ERROR;
-      send_message->payload = "Failed to add handle to chandle_table";
-      send_message->length = strlen(send_message->payload);
-      return;
-    }
-  }
   //   Add logging info
   log_info("exec_select: Selection operation completed successfully.\n");
 

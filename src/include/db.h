@@ -4,30 +4,19 @@
 #include <stdlib.h>
 
 #include "common.h"
-
-/*
- * Declares the type of a result column,
- which includes the number of tuples in the result, the data type of the result, and
- a pointer to the result data
- */
-typedef struct Result {
-  size_t num_tuples;
-  DataType data_type;
-  void *payload;
-} Result;
-
 typedef struct Column {
   char name[MAX_SIZE_NAME];
-  int *data;
-  size_t mmap_size;
+  DataType data_type;
+  void *data;
+  size_t mmap_size;  // can be derived from mmap_size (clean up later), also a result
+                     // column doesn't need to have this; what'd this mean for `insert`?
   int disk_fd;
   //   void *index;
-  size_t num_elements;  // can be derived from mmap_size (clean up later)
+  size_t num_elements;
   // Stat metrics
   long min_value;
   long max_value;
   long sum;
-
 } Column;
 
 /**
@@ -43,7 +32,6 @@ typedef struct Column {
  * - columns this is the pointer to an array of columns contained in the table.
  * - num_cols, the number of columns currently held in the table.
  **/
-
 typedef struct Table {
   char name[MAX_SIZE_NAME];
   Column *columns;

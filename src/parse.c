@@ -347,14 +347,9 @@ DbOperator *parse_select(char *query_command, char *handle) {
     db_operator_free(dbo);
     return NULL;
   }
-
-  GeneralizedColumn *gen_col = malloc(sizeof(GeneralizedColumn));
-  gen_col->column_type = COLUMN;
-  gen_col->column_pointer.column = col;
-  dbo->operator_fields.select_operator.comparator->gen_col = gen_col;
-
-  // Initialize the handle field
-  dbo->operator_fields.select_operator.comparator->handle = handle;
+  cs165_log(stdout, "parse_select: got column %s\n", col->name);
+  dbo->operator_fields.select_operator.comparator->col = col;
+  dbo->operator_fields.select_operator.res_handle = handle;
 
   return dbo;
 }

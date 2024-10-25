@@ -9,6 +9,9 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
+
+#include "common.h"
 
 /**
  * trims newline characters from a string (in place)
@@ -56,6 +59,8 @@ void log_err(const char *format, ...);
 //
 // Usage: log_info("Command received: %s", command_string);
 void log_info(const char *format, ...);
+
+void handle_error(message *send_message, char *error_message);
 
 int *extend_and_update_mmap(int *mapped_addr, size_t *current_size, size_t offset,
                             const int *new_values, size_t count);
