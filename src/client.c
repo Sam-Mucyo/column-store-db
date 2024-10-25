@@ -226,7 +226,7 @@ char **extract_csv_columns(const char *header, int *num_columns) {
     }
     columns[count][i] = '\0';  // Ensure null-termination
 
-    cs165_log(stdout, "column %d: %s\n", count, columns[count]);
+    // cs165_log(stdout, "column %d: %s\n", count, columns[count]);
 
     count++;
     token = strtok(NULL, ",");
@@ -259,7 +259,7 @@ int send_column_data(int socket, const char *csv_filename) {
   getline(&line, &len, file);
   int num_columns = 0;
   char **column_names = extract_csv_columns(line, &num_columns);
-  cs165_log(stdout, "num of columns: %d\n", num_columns);
+  //   cs165_log(stdout, "num of columns: %d\n", num_columns);
 
   int **column_data = malloc(num_columns * sizeof(int *));
   size_t *column_sizes = calloc(num_columns, sizeof(size_t));
@@ -267,7 +267,7 @@ int send_column_data(int socket, const char *csv_filename) {
   // count rows and allocate memory
   size_t num_rows = 0;
   while ((read = getline(&line, &len, file)) != -1) num_rows++;
-  cs165_log(stdout, "num of rows: %zu\n", num_rows);
+  //   cs165_log(stdout, "num of rows: %zu\n", num_rows);
 
   ColumnMetadata *metadata = malloc(num_columns * sizeof(ColumnMetadata));
   for (int i = 0; i < num_columns; i++) {
@@ -299,7 +299,7 @@ int send_column_data(int socket, const char *csv_filename) {
       token = strtok(NULL, ",");
     }
   }
-  cs165_log(stdout, "Finished reading data\n");
+  //   cs165_log(stdout, "Finished reading data\n");
 
   // Send data for each column
   for (int i = 0; i < num_columns; i++) {
@@ -337,6 +337,6 @@ int send_column_data(int socket, const char *csv_filename) {
   free(column_sizes);
 
   fclose(file);
-  log_info("Client finished sending data\n");
+  //   log_info("Client finished sending data\n");
   return 0;
 }
