@@ -130,6 +130,12 @@ void log_info(const char *format, ...) {
 #endif
 }
 
+void handle_error(message *send_message, char *error_message) {
+  send_message->status = EXECUTION_ERROR;
+  send_message->payload = error_message;
+  send_message->length = strlen(send_message->payload);
+}
+
 /**
  * @brief Extends memory-mapped region if necessary and updates values
  *

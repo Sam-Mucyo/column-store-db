@@ -1,5 +1,6 @@
 #include <string.h>
 
+#include "client_context.h"
 #include "query_exec.h"
 #include "utils.h"
 
@@ -8,95 +9,89 @@ void exec_fetch(DbOperator *query, message *send_message) {
   FetchOperator *fetch_op = &query->operator_fields.fetch_operator;
 
   // Get the Result from the select handle
-  GeneralizedColumn *select_gen_col = get_handle(fetch_op->select_handle);
-  if (!select_gen_col || select_gen_col->column_type != RESULT) {
-    send_message->status = EXECUTION_ERROR;
-    send_message->payload = "Invalid select handle or not a Result type";
-    send_message->length = strlen(send_message->payload);
+  Column *positions = get_handle(fetch_op->select_handle);
+  if (!positions) {
+    handle_error(send_message, "Invalid select handle\n");
     log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
     return;
   }
-
-  cs165_log(stdout, "Got select handle from variable pool/client context.\n");
-
-  Result *select_result = select_gen_col->column_pointer.result;
+  cs165_log(stdout, "exec_fetch: positions: %s\n", fetch_op->select_handle);
 
   // Get the Column to fetch from
   Column *fetch_col = fetch_op->col;
   if (!fetch_col) {
-    send_message->status = EXECUTION_ERROR;
-    send_message->payload = "Invalid fetch column";
-    send_message->length = strlen(send_message->payload);
+    handle_error(send_message, "Invalid column to fetch from\n");
     log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
     return;
   }
-  cs165_log(stdout, "Got fetch column from catalog.\n");
+  cs165_log(stdout, "exec_fetch: Fetching from column %s\n", fetch_col->name);
 
   // Create a new Result to store the fetched values
-  Result *fetch_result = malloc(sizeof(Result));
-  if (!fetch_result) {
-    send_message->status = EXECUTION_ERROR;
-    send_message->payload = "Failed to allocate memory for fetch result";
-    send_message->length = strlen(send_message->payload);
+  Column *fetch_result;
+  if (create_new_handle(fetch_op->fetch_handle, &fetch_result) != 0) {
+    handle_error(send_message, "Failed to create new handle\n");
+    log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
+    return;
+  }
+  fetch_result->data_type = fetch_col->data_type;
+  fetch_result->num_elements = positions->num_elements;
+
+  // get the size of a single element in the column
+  if (fetch_col->data_type == INT) {
+    fetch_result->data = malloc(fetch_result->num_elements * sizeof(int));
+  } else {
+    handle_error(send_message, "Fetching from non-integer column not supported\n");
     log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
     return;
   }
 
-  fetch_result->num_tuples = select_result->num_tuples;
-  fetch_result->payload = malloc(sizeof(int) * fetch_result->num_tuples);
-  fetch_result->data_type = INT;
-  if (!fetch_result->payload) {
-    send_message->status = EXECUTION_ERROR;
-    send_message->payload = "Failed to allocate memory for fetch result payload";
-    send_message->length = strlen(send_message->payload);
+  if (!fetch_result->data) {
+    handle_error(send_message, "Failed to allocate memory for result data\n");
     log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
     return;
   }
 
-  // Fetch the values
-  //   cs165_log(stdout, "Fetched values: ");
-  for (size_t i = 0; i < select_result->num_tuples; i++) {
-    size_t index = ((int *)select_result->payload)[i];
-    if (index >= fetch_col->num_elements) {
-      free(fetch_result->payload);
-      free(fetch_result);
-      send_message->status = EXECUTION_ERROR;
-      send_message->payload = "Index out of bounds in fetch operation";
-      send_message->length = strlen(send_message->payload);
-      log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
-      return;
+  if (positions->num_elements == 0) {
+    send_message->status = OK_DONE;
+    send_message->payload = "Done";
+    send_message->length = strlen(send_message->payload);
+    return;
+  }
+
+  //    Fetching the values
+  //    -----------
+
+  // Now we can start fetching the values. Since we have at least one element in the
+  // select, we can initialize the min and max as below.
+  fetch_result->min_value = fetch_col->max_value;
+  fetch_result->max_value = fetch_col->min_value;
+  fetch_result->sum = 0;
+
+  cs165_log(stdout, "Fetched values: ");
+  for (size_t i = 0; i < positions->num_elements; i++) {
+    size_t index = ((int *)positions->data)[i];
+    // The below, shouldn't happen, skip this check for performance reasons.
+    // if (index >= fetch_col->num_elements) {
+    //   free(fetch_result->data);
+    //   free(fetch_result);
+    //   handle_error(send_message, "Index out of bounds\n");
+    //   log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
+    //   return;
+    // }
+    //   TODO: consider alternative implementation for fetching values, while updating
+    //   stats. How can we optimize with batching, SIMD, etc?
+    int value = ((int *)fetch_col->data)[index];
+    cs165_log(stdout, "%d ", ((int *)fetch_col->data)[index]);
+    ((int *)fetch_result->data)[i] = value;
+    fetch_result->sum += value;
+    if (value < fetch_result->min_value) {
+      fetch_result->min_value = value;
     }
-    // cs165_log(stdout, "%d ", fetch_col->data[index]);
-    ((int *)fetch_result->payload)[i] = fetch_col->data[index];
+    if (value > fetch_result->max_value) {
+      fetch_result->max_value = value;
+    }
   }
   //   cs165_log(stdout, "\n");
-
-  // Store the result in the client context
-  if (g_client_context->variables_in_use >= MAX_VARIABLES) {
-    free(fetch_result->payload);
-    free(fetch_result);
-    send_message->status = EXECUTION_ERROR;
-    send_message->payload = "Maximum number of variables reached";
-    send_message->length = strlen(send_message->payload);
-    log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
-    return;
-  }
-
-  GeneralizedColumnHandle *handle =
-      &g_client_context->variable_pool[g_client_context->variables_in_use];
-  snprintf(handle->name, HANDLE_MAX_SIZE, "%s", fetch_op->fetch_handle);
-  handle->generalized_column.column_type = RESULT;
-  handle->generalized_column.column_pointer.result = fetch_result;
-
-  g_client_context->variables_in_use++;
-
-  // Add the new handle to the chandle_table
-  if (add_handle(fetch_op->fetch_handle, &handle->generalized_column).code != OK) {
-    send_message->status = EXECUTION_ERROR;
-    send_message->payload = "Server Failed to add handle to chandle_table";
-    send_message->length = strlen(send_message->payload);
-    log_err("L%d in exec_fetch: %s\n", __LINE__, send_message->payload);
-  }
 
   log_info("Fetch operation completed successfully.\n");
   send_message->status = OK_DONE;
