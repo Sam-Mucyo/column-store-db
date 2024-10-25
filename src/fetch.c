@@ -67,7 +67,7 @@ void exec_fetch(DbOperator *query, message *send_message) {
   fetch_result->max_value = fetch_col->min_value;
   fetch_result->sum = 0;
 
-  cs165_log(stdout, "Fetched values: ");
+  //   cs165_log(stdout, "Fetched values: ");
   for (size_t i = 0; i < positions->num_elements; i++) {
     size_t index = ((int *)positions->data)[i];
     // The below, shouldn't happen, skip this check for performance reasons.
@@ -81,7 +81,7 @@ void exec_fetch(DbOperator *query, message *send_message) {
     //   TODO: consider alternative implementation for fetching values, while updating
     //   stats. How can we optimize with batching, SIMD, etc?
     int value = ((int *)fetch_col->data)[index];
-    cs165_log(stdout, "%d ", ((int *)fetch_col->data)[index]);
+    // cs165_log(stdout, "%d ", ((int *)fetch_col->data)[index]);
     ((int *)fetch_result->data)[i] = value;
     fetch_result->sum += value;
     if (value < fetch_result->min_value) {

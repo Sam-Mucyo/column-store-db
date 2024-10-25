@@ -54,10 +54,10 @@ void exec_select(DbOperator *query, message *send_message) {
       column->data, column->num_elements, comparator->type1, comparator->p_low,
       comparator->type2, comparator->p_high, result->data);
 
-  cs165_log(stdout, "Selected %d indices: \n", result->num_elements);
-  for (size_t i = 0; i < result->num_elements; i++) {
-    printf("%d, ", ((int *)result->data)[i]);
-  }
+  //   cs165_log(stdout, "Selected %d indices: \n", result->num_elements);
+  //   for (size_t i = 0; i < result->num_elements; i++) {
+  //     printf("%d, ", ((int *)result->data)[i]);
+  //   }
   printf("\n");
 
   //   Add logging info
