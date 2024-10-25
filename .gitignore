@@ -4,6 +4,7 @@
 
 #DB Storage file 
 src/disk/
+*.bin
 
 # Outputs
 infra_outputs
@@ -17,6 +18,7 @@ latex/
 Doxyfile
 docs/colDbDesign.drawio - draw.io_files/
 docs/colDbDesign.drawio\ -\ draw.io.html
+src/draft/
 
 # Object files
 obj/*
