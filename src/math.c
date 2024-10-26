@@ -1,0 +1,56 @@
+#include "client_context.h"
+#include "query_exec.h"
+#include "utils.h"
+
+void exec_aggr(DbOperator *query, message *send_message) {
+  cs165_log(stdout, "Executing aggr query:\nres_handle: %s\ncol: %s\n",
+            query->operator_fields.aggregate_operator.res_handle,
+            query->operator_fields.aggregate_operator.col->name);
+
+  // Get the Column from the fetch handle
+  AggregateOperator *aggr_op = &query->operator_fields.aggregate_operator;
+  Column *col = aggr_op->col;
+
+  // Create a new Column to store the result
+  Column *res_col;
+  if (create_new_handle(aggr_op->res_handle, &res_col) != 0) {
+    handle_error(send_message, "Failed to create new handle\n");
+    log_err("L%d in handle_aggr: %s\n", __LINE__, send_message->payload);
+  }
+  cs165_log(stdout, "added new handle: %s\n", aggr_op->res_handle);
+
+  res_col->data = malloc(sizeof(double));
+  if (!res_col->data) {
+    free(res_col);
+    handle_error(send_message, "Failed to allocate memory for result data");
+  }
+
+  if (query->type == AVG) {
+    *((double *)res_col->data) =
+        col->num_elements == 0 ? 0.0 : (double)col->sum / col->num_elements;
+  } else if (query->type == MIN) {
+    *((double *)res_col->data) = col->min_value;
+  } else if (query->type == MAX) {
+    cs165_log(stdout, "Max: %ld\n", col->max_value);
+    *((double *)res_col->data) = col->max_value;
+  } else if (query->type == SUM) {
+    cs165_log(stdout, "Sum: %ld\n", col->sum);
+    *((double *)res_col->data) = col->sum;
+  } else {
+    handle_error(send_message, "Unsupported aggregate operation");
+    log_err("L%d in handle_aggr: %s\n", __LINE__, send_message->payload);
+  }
+  res_col->data_type = FLOAT;
+  res_col->num_elements = 1;
+  send_message->status = OK_DONE;
+  send_message->payload = "Done";
+  send_message->length = strlen(send_message->payload);
+  log_info("Aggregate operation completed for %s, with result %f\n", col->name,
+           *((double *)res_col->data));
+}
+
+void exec_arithmetic(DbOperator *query, message *send_message) {
+  (void)query;
+  (void)send_message;
+  log_err("L%d: TODO: Implement exec_arithmetic\n", __LINE__);
+}

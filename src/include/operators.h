@@ -15,6 +15,11 @@ typedef enum OperatorType {
   FETCH,
   PRINT,
   AVG,
+  MIN,
+  MAX,
+  SUM,
+  ADD,
+  SUB,
   SHUTDOWN,
 } OperatorType;
 
@@ -88,10 +93,16 @@ typedef struct FetchOperator {
   Column *col;
 } FetchOperator;
 
-typedef struct AvgOperator {
-  char *avg_handle;
-  char *fetch_handle;
-} AvgOperator;
+typedef struct AggregateOperator {
+  Column *col;
+  char *res_handle;
+} AggregateOperator;
+
+typedef struct ArithmeticOperator {
+  Column *col1;
+  Column *col2;
+  char *res_handle;
+} ArithmeticOperator;
 
 typedef struct PrintOperator {
   char *handle_to_print;
@@ -106,8 +117,9 @@ typedef union OperatorFields {
   LoadOperator load_operator;
   SelectOperator select_operator;
   FetchOperator fetch_operator;
-  AvgOperator avg_operator;
   PrintOperator print_operator;
+  AggregateOperator aggregate_operator;
+  ArithmeticOperator arithmetic_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:

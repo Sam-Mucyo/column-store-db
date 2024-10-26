@@ -7,7 +7,6 @@
 #include "query_exec.h"
 #include "utils.h"
 
-void handle_avg(DbOperator *query, message *send_message);
 void handle_print(DbOperator *query, message *send_message);
 
 /**
@@ -32,7 +31,14 @@ void handle_dbOperator(DbOperator *query, message *send_message) {
       handle_print(query, send_message);
       break;
     case AVG:
-      handle_avg(query, send_message);
+    case MIN:
+    case MAX:
+    case SUM:
+      exec_aggr(query, send_message);
+      break;
+    case ADD:
+    case SUB:
+      exec_arithmetic(query, send_message);
       break;
     case INSERT:
       exec_insert(query, send_message);
@@ -42,46 +48,6 @@ void handle_dbOperator(DbOperator *query, message *send_message) {
       break;
   }
   db_operator_free(query);
-}
-
-void handle_avg(DbOperator *query, message *send_message) {
-  cs165_log(stdout, "Executing avg query:\navg_handle: %s\nfetch_handle: %s\n",
-            query->operator_fields.avg_operator.avg_handle,
-            query->operator_fields.avg_operator.fetch_handle);
-
-  // Get the Column from the fetch handle
-  AvgOperator *avg_op = &query->operator_fields.avg_operator;
-  Column *col = get_handle(avg_op->fetch_handle);
-  if (!col) {
-    handle_error(send_message, "Invalid fetch handle\n");
-    log_err("L%d in exec_avg: %s\n", __LINE__, send_message->payload);
-  }
-
-  // Create a new Column to store the result
-  Column *avg_col;
-  if (create_new_handle(avg_op->avg_handle, &avg_col) != 0) {
-    handle_error(send_message, "Failed to create new handle\n");
-    log_err("L%d in exec_avg: %s\n", __LINE__, send_message->payload);
-  }
-  cs165_log(stdout, "added new handle: %s\n", avg_op->avg_handle);
-
-  avg_col->data = malloc(sizeof(double));
-  if (!avg_col->data) {
-    free(avg_col);
-    handle_error(send_message, "Failed to allocate memory for result data");
-  }
-  // Set the result of the average operation
-  *((double *)avg_col->data) =
-      col->num_elements == 0 ? 0.0 : (double)col->sum / col->num_elements;
-
-  avg_col->data_type = FLOAT;
-  avg_col->num_elements = 1;
-
-  log_info("Average operation completed successfully. Average: %f\n",
-           *((double *)avg_col->data));
-  send_message->status = OK_DONE;
-  send_message->payload = "Done";
-  send_message->length = strlen(send_message->payload);
 }
 
 void handle_print(DbOperator *query, message *send_message) {
@@ -131,7 +97,7 @@ void handle_print(DbOperator *query, message *send_message) {
       current_pos += sprintf(result_string + current_pos, "%d\n", ((int *)col->data)[i]);
     } else if (col->data_type == FLOAT) {
       current_pos +=
-          sprintf(result_string + current_pos, "%f\n", ((double *)col->data)[i]);
+          sprintf(result_string + current_pos, "%g\n", ((double *)col->data)[i]);
     }
   }
 
