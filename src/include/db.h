@@ -11,6 +11,7 @@ typedef struct Column {
   size_t mmap_size;  // can be derived from mmap_size (clean up later), also a result
                      // column doesn't need to have this; what'd this mean for `insert`?
   int disk_fd;
+  int is_dirty;  // a flag to indicate if the column has been modified
   //   void *index;
   size_t num_elements;
   // Stat metrics

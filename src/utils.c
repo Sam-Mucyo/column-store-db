@@ -170,6 +170,7 @@ int *extend_and_update_mmap(int *mapped_addr, size_t *current_size, size_t offse
   if (required_size > *current_size) {
     // Round up to nearest page size for efficiency
     size_t page_size = sysconf(_SC_PAGESIZE);
+    cs165_log(stdout, "extend_and_update_mmap: page size %zu\n", page_size);
     size_t new_size = (required_size + page_size - 1) & ~(page_size - 1);
 
     // Remap with new size

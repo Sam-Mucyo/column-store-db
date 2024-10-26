@@ -29,6 +29,7 @@ void exec_insert(DbOperator *query, message *send_message) {
     cols[i].min_value = values[i] < cols[i].min_value ? values[i] : cols[i].min_value;
     cols[i].max_value = values[i] > cols[i].max_value ? values[i] : cols[i].max_value;
     cols[i].sum += values[i];
+    cols[i].is_dirty = 1;
   }
 
   log_info("successfully added new values in table");
