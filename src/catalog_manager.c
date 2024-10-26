@@ -148,6 +148,7 @@ Status init_db_from_disk(void) {
             col->num_elements = num_elements;
             col->min_value = min_value;
             col->max_value = max_value;
+            col->is_dirty = 0;
 
             // Construct the path to the column's data file
             char col_path[MAX_PATH_LEN];
@@ -277,12 +278,16 @@ Status shutdown_catalog_manager(void) {
               "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%ld\n",
               col->name, col->num_elements, col->min_value, col->max_value);
 
+      if (col->is_dirty) {
+        if (ftruncate(col->disk_fd, col->mmap_size) == -1) {
+          log_err("Error truncating column data file");
+        }
+        if (msync(col->data, col->mmap_size, MS_SYNC) == -1) {
+          log_err("Error syncing memory to disk");
+        }
+      }
       // unmap the column data and close the file descriptor
       if (col->data) {
-        cs165_log(stdout, "Freeing memory for column %s\n", col->name);
-        cs165_log(stdout, "first element: %d\n", ((int *)col->data)[0]);
-        cs165_log(stdout, "last element: %d\n",
-                  ((int *)col->data)[col->num_elements - 1]);
         cs165_log(stdout, "num_elements: %zu\n", col->num_elements);
         if (munmap(col->data, col->mmap_size) == -1) {
           log_err("Error unmapping memory");

@@ -231,6 +231,7 @@ int receive_columns(int socket) {
     col->min_value = metadata.min_value;
     col->max_value = metadata.max_value;
     col->sum = metadata.sum;
+    col->data_type = INT;
 
     // Calculate file size
     size_t file_size = metadata.num_elements * sizeof(int);
@@ -289,13 +290,14 @@ int receive_columns(int socket) {
               metadata.name, file_size, total_received);
       return -1;
     }
-
-    // Ensure data is written to disk
-    if (msync(col->data, file_size, MS_SYNC) == -1) {
-      log_err("Failed to sync mmap'd file for column %s: %s\n", metadata.name,
-              strerror(errno));
-      return -1;
-    }
+    col->is_dirty = 0;
+    // NOTE: Differing this for `shutdown`
+    // // Ensure data is written to disk
+    // if (msync(col->data, file_size, MS_SYNC) == -1) {
+    //   log_err("Failed to sync mmap'd file for column %s: %s\n", metadata.name,
+    //           strerror(errno));
+    //   return -1;
+    // }
 
     printf("Successfully received and stored data for column %s\n", metadata.name);
   }
