@@ -130,10 +130,11 @@ Status init_db_from_disk(void) {
           for (size_t j = 0; j < table->num_cols; j++) {
             Column *col = &table->columns[j];
             size_t num_elements;
-            long min_value, max_value;
+            long min_value, max_value, sum;
             if (fscanf(meta_file,
-                       "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%ld\n",
-                       col->name, &num_elements, &min_value, &max_value) != 4) {
+                       "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%"
+                       "ld\nSUM=%ld\n",
+                       col->name, &num_elements, &min_value, &max_value, &sum) != 5) {
               log_err("init_db_from_disk: Failed to read column metadata for table %s\n",
                       table->name);
               free(table->columns);
@@ -148,6 +149,7 @@ Status init_db_from_disk(void) {
             col->num_elements = num_elements;
             col->min_value = min_value;
             col->max_value = max_value;
+            col->sum = sum;
             col->is_dirty = 0;
 
             // Construct the path to the column's data file
@@ -209,7 +211,8 @@ Column *get_column_from_catalog(const char *db_tbl_col_name) {
   char table_name[MAX_SIZE_NAME];
   char column_name[MAX_SIZE_NAME];
   if (sscanf(db_tbl_col_name, "%[^.].%[^.].%s", db_name, table_name, column_name) != 3) {
-    log_err("get_column_from_catalog: Invalid db_tbl_col_name format");
+    log_err("get_column_from_catalog: Invalid db_tbl_col_name format. Got %s\n",
+            db_tbl_col_name);
     return NULL;
   }
 
@@ -275,8 +278,8 @@ Status shutdown_catalog_manager(void) {
     for (size_t j = 0; j < table->num_cols; j++) {
       Column *col = &table->columns[j];
       fprintf(meta_file,
-              "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%ld\n",
-              col->name, col->num_elements, col->min_value, col->max_value);
+              "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%ld\nSUM=%ld\n",
+              col->name, col->num_elements, col->min_value, col->max_value, col->sum);
 
       if (col->is_dirty) {
         if (ftruncate(col->disk_fd, col->mmap_size) == -1) {
