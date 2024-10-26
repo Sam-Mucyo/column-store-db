@@ -31,10 +31,8 @@ void exec_aggr(DbOperator *query, message *send_message) {
   } else if (query->type == MIN) {
     *((double *)res_col->data) = col->min_value;
   } else if (query->type == MAX) {
-    cs165_log(stdout, "Max: %ld\n", col->max_value);
     *((double *)res_col->data) = col->max_value;
   } else if (query->type == SUM) {
-    cs165_log(stdout, "Sum: %ld\n", col->sum);
     *((double *)res_col->data) = col->sum;
   } else {
     handle_error(send_message, "Unsupported aggregate operation");
@@ -50,7 +48,50 @@ void exec_aggr(DbOperator *query, message *send_message) {
 }
 
 void exec_arithmetic(DbOperator *query, message *send_message) {
-  (void)query;
-  (void)send_message;
-  log_err("L%d: TODO: Implement exec_arithmetic\n", __LINE__);
+  Column *col1 = query->operator_fields.arithmetic_operator.col1;
+  Column *col2 = query->operator_fields.arithmetic_operator.col2;
+  cs165_log(stdout, "Executing arithmetic on columns: %s, %s\n", col1->name, col2->name);
+
+  // Create a new Column to store the result
+  Column *res_col;
+  if (create_new_handle(query->operator_fields.arithmetic_operator.res_handle,
+                        &res_col) != 0) {
+    handle_error(send_message, "Failed to create new handle\n");
+    log_err("L%d in handle_arithmetic: %s\n", __LINE__, send_message->payload);
+  }
+
+  res_col->data = malloc(col1->num_elements * sizeof(int));
+  if (!res_col->data) {
+    free(res_col);
+    handle_error(send_message, "Failed to allocate memory for result data");
+  }
+
+  //   We currently only support ADD and SUB over integer columns
+  if (col1->data_type != INT || col2->data_type != INT) {
+    handle_error(send_message,
+                 "Arithmetic operations are only supported on integer columns");
+    log_err("L%d in handle_arithmetic: %s\n", __LINE__, send_message->payload);
+  }
+
+  // Perform the arithmetic operation
+  if (query->type == ADD) {
+    for (size_t i = 0; i < col1->num_elements; i++) {
+      ((int *)res_col->data)[i] = ((int *)col1->data)[i] + ((int *)col2->data)[i];
+    }
+  } else if (query->type == SUB) {
+    for (size_t i = 0; i < col1->num_elements; i++) {
+      ((int *)res_col->data)[i] = ((int *)col1->data)[i] - ((int *)col2->data)[i];
+    }
+  } else {
+    handle_error(send_message, "Unsupported arithmetic operation");
+    log_err("L%d in handle_arithmetic: %s\n", __LINE__, send_message->payload);
+  }
+
+  res_col->data_type = INT;
+  res_col->num_elements = col1->num_elements;
+  send_message->status = OK_DONE;
+  send_message->payload = "Done";
+  send_message->length = strlen(send_message->payload);
+  log_info("Arithmetic operation completed for %s, with result stored in %s\n",
+           col1->name, res_col->name);
 }

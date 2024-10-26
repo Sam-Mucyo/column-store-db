@@ -503,6 +503,17 @@ DbOperator *parse_fetch(char *query_command, char *fetch_handle) {
   return dbo;
 }
 
+Column *get_chandle_or_dbtblcol(char *name) {
+  Column *col = NULL;
+  // NOTE: based on project language, we can assume column names include dots
+  if (strchr(name, '.') != NULL) {
+    col = get_column_from_catalog(name);  // get the column from the catalog
+  } else {
+    col = get_handle(name);  // from client context (variable pool)
+  }
+  return col;
+}
+
 /**
  * @brief parse_aggregate
  * Parses the aggregate command and returns a DbOperator if the arguments are valid.
@@ -521,23 +532,10 @@ DbOperator *parse_fetch(char *query_command, char *fetch_handle) {
 DbOperator *parse_aggr(char *query_command, char *res_handle, OperatorType type) {
   log_info("L%d: parse_aggr: received: %s\n", __LINE__, query_command);
 
-  // get the fetch handle "avg(f1)" -> "f1"
-  const char *start = strchr(query_command, '(');
-  if (start == NULL) {
-    return NULL;
-  }
-  start++;
-  char *col_handle = strndup(start, strchr(start, ')') - start);
-
+  char *col_handle = trim_parenthesis(query_command);
   cs165_log(stdout, "res_handle: %s, col: %s\n", res_handle, col_handle);
 
-  Column *col = NULL;
-  // NOTE: based on project language, we can assume column names include dots
-  if (strchr(col_handle, '.') != NULL) {
-    col = get_column_from_catalog(col_handle);  // get the column from the catalog
-  } else {
-    col = get_handle(col_handle);  // from client context (variable pool)
-  }
+  Column *col = get_chandle_or_dbtblcol(col_handle);
   if (!col) {
     log_err("L%d: parse_aggr failed. Bad column name\n", __LINE__);
     return NULL;
@@ -558,12 +556,52 @@ DbOperator *parse_aggr(char *query_command, char *res_handle, OperatorType type)
   return dbo;
 }
 
+/**
+ * @brief parse_arithmetic
+ * Example input: (f11,f12) or (db1.tbl1.col1,db1.tbl1.col2) where f11 and f12 are
+ * handles in the client context, and db1.tbl1.col1 and db1.tbl1.col2 are column names
+ * in the catalog.
+ *
+ * @param query_command
+ * @param handle
+ * @param type
+ * @return DbOperator* a Db operator of type ADD or SUB, with `ArithimeticOperator`
+ * fields on success, NULL on failure.
+ */
 DbOperator *parse_arithmetic(char *query_command, char *handle, OperatorType type) {
-  (void)query_command;
-  (void)handle;
-  (void)type;
-  log_err("L%d: TODO: Implement parse_arithmetic\n", __LINE__);
-  return NULL;
+  cs165_log(stdout, "L%d: parse_arithmetic received: %s\n", __LINE__, query_command);
+
+  char *col1_col2 = trim_parenthesis(query_command);
+  char *col1_name = strsep(&col1_col2, ",");
+  char *col2_name = col1_col2;
+  cs165_log(stdout, "parse_arithmetic: col1: %s, col2: %s\n", col1_name, col2_name);
+
+  Column *col1 = get_chandle_or_dbtblcol(col1_name);
+  if (!col1) {
+    log_err("L%d: parse_arithmetic failed. Bad column name\n", __LINE__);
+    return NULL;
+  }
+
+  Column *col2 = get_chandle_or_dbtblcol(col2_name);
+  if (!col2) {
+    log_err("L%d: parse_arithmetic failed. Bad column name\n", __LINE__);
+    return NULL;
+  }
+
+  // Make DbOperator for arithmetic
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  if (dbo == NULL) {
+    log_err("L%d: parse_arithmetic failed. malloc for DbOperator failed\n", __LINE__);
+    return NULL;
+  }
+
+  dbo->type = type;
+  dbo->operator_fields.arithmetic_operator.col1 = col1;
+  dbo->operator_fields.arithmetic_operator.col2 = col2;
+  dbo->operator_fields.arithmetic_operator.res_handle = handle;  // handle to store result
+
+  log_info("Successfully parsed arithmetic command\n");
+  return dbo;
 }
 
 DbOperator *parse_print(char *query_command) {
