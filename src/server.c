@@ -78,7 +78,7 @@ void handle_client(int client_socket, int *shutdown) {
   while (true) {
     length = recv(client_socket, &recv_message, sizeof(message), 0);
     if (length <= 0) {
-      log_err("Client connection closed!\n");
+      cs165_log(stdout, "Client connection closed!\n");
       break;
     }
     if (recv_message.status == SERVER_SHUTDOWN) {

@@ -20,13 +20,113 @@
 #include "client_context.h"
 #include "utils.h"
 
+// Function prototypes
+DbOperator *parse_create(char *create_arguments);
+DbOperator *parse_insert(char *insert_arguments, message *send_message);
+DbOperator *parse_select(char *select_arguments, char *handle);
+DbOperator *parse_fetch(char *fetch_arguments, char *handle);
+DbOperator *parse_aggr(char *aggr_arguments, char *handle, OperatorType type);
+DbOperator *parse_arithmetic(char *arithmetic_arguments, char *handle, OperatorType type);
+DbOperator *parse_print(char *print_arguments);
+
+/**
+ * @brief parse_command
+ * This method takes in a string representing the initial raw input from the client,
+ * uses the first word to determine its category: create, insert, select, fetch, etc.
+ * and then passes the arguments to the appropriate parsing function.
+ *
+ * @param query_command
+ * @param send_message
+ * @param client_socket
+ * @param context
+ * @return DbOperator* the database operator to be executed. NULL if the command is not
+ * recognized.
+ */
+DbOperator *parse_command(char *query_command, message *send_message, int client_socket,
+                          ClientContext *context) {
+  // a second option is to malloc the dbo here (instead of inside the parse
+  // commands). Either way, you should track the dbo and free it when the variable is
+  // no longer needed.
+  DbOperator *dbo = NULL;  // = malloc(sizeof(DbOperator));
+  send_message->status = OK_WAIT_FOR_RESPONSE;
+
+  if (strncmp(query_command, "--", 2) == 0) {
+    send_message->status = OK_DONE;
+    // The -- signifies a comment line, no operator needed.
+    return NULL;
+  }
+
+  char *equals_pointer = strchr(query_command, '=');
+  char *handle = query_command;
+  if (equals_pointer != NULL) {
+    // handle exists, store here.
+    *equals_pointer = '\0';
+    cs165_log(stdout, "FILE HANDLE: %s\n", handle);
+    query_command = ++equals_pointer;
+  } else {
+    handle = NULL;
+  }
+
+  cs165_log(stdout, "QUERY: %s\n", query_command);
+
+  // by default, set the status to acknowledge receipt of command,
+  //   indication to client to now wait for the response from the server.
+  //   Note, some commands might want to relay a different status back to the client.
+  send_message->status = OK_WAIT_FOR_RESPONSE;
+  query_command = trim_whitespace(query_command);
+  // check what command is given.
+  if (strncmp(query_command, "create", 6) == 0) {
+    query_command += 6;
+    // TODO: Make all `parse_` function take in `send_message` and set the status there.
+    //  Currently, commands with just `INCORRECT_FORMAT` will be treated as
+    //  `UNKNOWN_COMMAND`
+    dbo = parse_create(query_command);
+  } else if (strncmp(query_command, "relational_insert", 17) == 0) {
+    query_command += 17;
+    dbo = parse_insert(query_command, send_message);
+  } else if (strncmp(query_command, "select", 6) == 0) {
+    query_command += 6;
+    dbo = parse_select(query_command, handle);
+  } else if (strncmp(query_command, "fetch", 5) == 0) {
+    query_command += 5;
+    dbo = parse_fetch(query_command, handle);
+  } else if (strncmp(query_command, "avg", 3) == 0) {
+    query_command += 3;
+    dbo = parse_aggr(query_command, handle, AVG);
+  } else if (strncmp(query_command, "sum", 3) == 0) {
+    query_command += 3;
+    dbo = parse_aggr(query_command, handle, SUM);
+  } else if (strncmp(query_command, "min", 3) == 0) {
+    query_command += 3;
+    dbo = parse_aggr(query_command, handle, MIN);
+  } else if (strncmp(query_command, "max", 3) == 0) {
+    query_command += 3;
+    dbo = parse_aggr(query_command, handle, MAX);
+  } else if (strncmp(query_command, "sub", 3) == 0) {
+    query_command += 3;
+    dbo = parse_arithmetic(query_command, handle, SUB);
+  } else if (strncmp(query_command, "add", 3) == 0) {
+    query_command += 3;
+    dbo = parse_arithmetic(query_command, handle, ADD);
+  } else if (strncmp(query_command, "print", 5) == 0) {
+    query_command += 5;
+    dbo = parse_print(query_command);
+  } else {
+    send_message->status = UNKNOWN_COMMAND;
+  }
+  if (dbo == NULL) return dbo;
+
+  dbo->client_fd = client_socket;
+  dbo->context = context;
+  return dbo;
+}
+
 /**
  * Takes a pointer to a string.
  * This method returns the original string truncated to where its first comma lies.
  * In addition, the original string now points to the first character after that
  *comma. This method destroys its input.
  **/
-
 char *next_token(char **tokenizer, message_status *status) {
   char *token = strsep(tokenizer, ",");
   if (token == NULL) {
@@ -403,44 +503,104 @@ DbOperator *parse_fetch(char *query_command, char *fetch_handle) {
   return dbo;
 }
 
+Column *get_chandle_or_dbtblcol(char *name) {
+  Column *col = NULL;
+  // NOTE: based on project language, we can assume column names include dots
+  if (strchr(name, '.') != NULL) {
+    col = get_column_from_catalog(name);  // get the column from the catalog
+  } else {
+    col = get_handle(name);  // from client context (variable pool)
+  }
+  return col;
+}
+
 /**
- * @brief parse_avg
- * This method takes in a string representing the arguments to average a column, parses
- * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ * @brief parse_aggregate
+ * Parses the aggregate command and returns a DbOperator if the arguments are valid.
+ * Otherwise, it returns NULL.
  *
  * Example query (without a handle):
- *     - avg(f1)           --- where f1 is a handle to the result of a fetch query
+ *    - avg(f1)            --- where f1 is a handle to the result of a fetch query
+ *    - sum(f1)            --- where f1 is a handle to the result of a fetch query
+ *    - avg(db1.tbl1.col1) --- where db1.tbl1.col1 is a handle to the result of a fetch
  *
- * @param query_command
- * @param avg_handle the handle to the result of this avg query
- * @return DbOperator* with info about the new handle and fetch handle
+ * @param query_command  the command to parse (e.g., (f1), (db1.tbl1.col1))
+ * @param res_handle the handle to the result of this aggregate query
+ * @param type the type of aggregate operator (e.g., AVG, SUM)
+ * @return DbOperator*
  */
-DbOperator *parse_avg(char *query_command, char *avg_handle) {
-  log_info("L%d: parse_avg received: %s\n", __LINE__, query_command);
+DbOperator *parse_aggr(char *query_command, char *res_handle, OperatorType type) {
+  log_info("L%d: parse_aggr: received: %s\n", __LINE__, query_command);
 
-  // get the fetch handle "avg(f1)" -> "f1"
-  const char *start = strchr(query_command, '(');
-  if (start == NULL) {
+  char *col_handle = trim_parenthesis(query_command);
+  cs165_log(stdout, "res_handle: %s, col: %s\n", res_handle, col_handle);
+
+  Column *col = get_chandle_or_dbtblcol(col_handle);
+  if (!col) {
+    log_err("L%d: parse_aggr failed. Bad column name\n", __LINE__);
     return NULL;
   }
-  start++;
-  char *fetch_handle = strndup(start, strchr(start, ')') - start);
 
-  cs165_log(stdout, "avg_handle: %s, fetch_handle: %s\n", avg_handle, fetch_handle);
-
+  // Make DbOperator for avg
   DbOperator *dbo = malloc(sizeof(DbOperator));
   if (dbo == NULL) {
-    log_err("L%d: parse_avg failed. malloc for DbOperator failed\n", __LINE__);
+    log_err("L%d: parse_aggr: failed. malloc for DbOperator failed\n", __LINE__);
     return NULL;
   }
 
-  dbo->type = AVG;
-  dbo->operator_fields.avg_operator.avg_handle = avg_handle;
-  dbo->operator_fields.avg_operator.fetch_handle = fetch_handle;
+  dbo->type = type;
+  dbo->operator_fields.aggregate_operator.res_handle = res_handle;
+  dbo->operator_fields.aggregate_operator.col = col;
 
-  cs165_log(stdout, "parse_avg: avg_handle: %s, fetch_handle: %s\n", avg_handle,
-            fetch_handle);
   log_info("Successfully parsed avg command\n");
+  return dbo;
+}
+
+/**
+ * @brief parse_arithmetic
+ * Example input: (f11,f12) or (db1.tbl1.col1,db1.tbl1.col2) where f11 and f12 are
+ * handles in the client context, and db1.tbl1.col1 and db1.tbl1.col2 are column names
+ * in the catalog.
+ *
+ * @param query_command
+ * @param handle
+ * @param type
+ * @return DbOperator* a Db operator of type ADD or SUB, with `ArithimeticOperator`
+ * fields on success, NULL on failure.
+ */
+DbOperator *parse_arithmetic(char *query_command, char *handle, OperatorType type) {
+  cs165_log(stdout, "L%d: parse_arithmetic received: %s\n", __LINE__, query_command);
+
+  char *col1_col2 = trim_parenthesis(query_command);
+  char *col1_name = strsep(&col1_col2, ",");
+  char *col2_name = col1_col2;
+  cs165_log(stdout, "parse_arithmetic: col1: %s, col2: %s\n", col1_name, col2_name);
+
+  Column *col1 = get_chandle_or_dbtblcol(col1_name);
+  if (!col1) {
+    log_err("L%d: parse_arithmetic failed. Bad column name\n", __LINE__);
+    return NULL;
+  }
+
+  Column *col2 = get_chandle_or_dbtblcol(col2_name);
+  if (!col2) {
+    log_err("L%d: parse_arithmetic failed. Bad column name\n", __LINE__);
+    return NULL;
+  }
+
+  // Make DbOperator for arithmetic
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  if (dbo == NULL) {
+    log_err("L%d: parse_arithmetic failed. malloc for DbOperator failed\n", __LINE__);
+    return NULL;
+  }
+
+  dbo->type = type;
+  dbo->operator_fields.arithmetic_operator.col1 = col1;
+  dbo->operator_fields.arithmetic_operator.col2 = col2;
+  dbo->operator_fields.arithmetic_operator.res_handle = handle;  // handle to store result
+
+  log_info("Successfully parsed arithmetic command\n");
   return dbo;
 }
 
@@ -469,82 +629,5 @@ DbOperator *parse_print(char *query_command) {
 
   cs165_log(stdout, "handle_to_print: %s\n", handle);
   log_info("Successfully parsed print command\n");
-  return dbo;
-}
-
-/**
- * @brief parse_command
- * This method takes in a string representing the initial raw input from the client,
- * uses the first word to determine its category: create, insert, select, fetch, etc.
- * and then passes the arguments to the appropriate parsing function.
- *
- * @param query_command
- * @param send_message
- * @param client_socket
- * @param context
- * @return DbOperator* the database operator to be executed. NULL if the command is not
- * recognized.
- */
-DbOperator *parse_command(char *query_command, message *send_message, int client_socket,
-                          ClientContext *context) {
-  // a second option is to malloc the dbo here (instead of inside the parse
-  // commands). Either way, you should track the dbo and free it when the variable is
-  // no longer needed.
-  DbOperator *dbo = NULL;  // = malloc(sizeof(DbOperator));
-  send_message->status = OK_WAIT_FOR_RESPONSE;
-
-  if (strncmp(query_command, "--", 2) == 0) {
-    send_message->status = OK_DONE;
-    // The -- signifies a comment line, no operator needed.
-    return NULL;
-  }
-
-  char *equals_pointer = strchr(query_command, '=');
-  char *handle = query_command;
-  if (equals_pointer != NULL) {
-    // handle exists, store here.
-    *equals_pointer = '\0';
-    cs165_log(stdout, "FILE HANDLE: %s\n", handle);
-    query_command = ++equals_pointer;
-  } else {
-    handle = NULL;
-  }
-
-  cs165_log(stdout, "QUERY: %s\n", query_command);
-
-  // by default, set the status to acknowledge receipt of command,
-  //   indication to client to now wait for the response from the server.
-  //   Note, some commands might want to relay a different status back to the client.
-  send_message->status = OK_WAIT_FOR_RESPONSE;
-  query_command = trim_whitespace(query_command);
-  // check what command is given.
-  if (strncmp(query_command, "create", 6) == 0) {
-    query_command += 6;
-    // TODO: Make all `parse_` function take in `send_message` and set the status there.
-    //  Currently, commands with just `INCORRECT_FORMAT` will be treated as
-    //  `UNKNOWN_COMMAND`
-    dbo = parse_create(query_command);
-  } else if (strncmp(query_command, "relational_insert", 17) == 0) {
-    query_command += 17;
-    dbo = parse_insert(query_command, send_message);
-  } else if (strncmp(query_command, "select", 6) == 0) {
-    query_command += 6;
-    dbo = parse_select(query_command, handle);
-  } else if (strncmp(query_command, "fetch", 5) == 0) {
-    query_command += 5;
-    dbo = parse_fetch(query_command, handle);
-  } else if (strncmp(query_command, "avg", 3) == 0) {
-    query_command += 3;
-    dbo = parse_avg(query_command, handle);
-  } else if (strncmp(query_command, "print", 5) == 0) {
-    query_command += 5;
-    dbo = parse_print(query_command);
-  } else {
-    send_message->status = UNKNOWN_COMMAND;
-  }
-  if (dbo == NULL) return dbo;
-
-  dbo->client_fd = client_socket;
-  dbo->context = context;
   return dbo;
 }
