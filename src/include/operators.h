@@ -106,7 +106,8 @@ typedef struct ArithmeticOperator {
 } ArithmeticOperator;
 
 typedef struct PrintOperator {
-  char *handle_to_print;
+  Column **columns;
+  size_t num_columns;
 } PrintOperator;
 
 /*

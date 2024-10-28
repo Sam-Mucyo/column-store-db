@@ -646,28 +646,68 @@ DbOperator *parse_arithmetic(char *query_command, char *handle, OperatorType typ
   return dbo;
 }
 
+/**
+ * @brief Parses a comma-separated list of column names and creates a print operator
+ * Example input: (<vec_val1>,<vec_val2>,...)
+ *
+ * @param query_command String containing comma-separated column names in parentheses
+ * @return DbOperator* Print operator on success, NULL on failure
+ */
 DbOperator *parse_print(char *query_command) {
   cs165_log(stdout, "L%d: parse_print received: %s\n", __LINE__, query_command);
 
-  // get the fetch handle "print(f1)" -> "f1"
-  const char *start = strchr(query_command, '(');
-  if (start == NULL) {
-    log_err("L%d: parse_print failed. incorrect format\n", __LINE__);
-    return NULL;
-  }
-  start++;
-  char *handle = strndup(start, strchr(start, ')') - start);
-
+  char *handle = trim_parenthesis(query_command);
   cs165_log(stdout, "fetch_handle: %s\n", handle);
 
+  // Allocate DbOperator
   DbOperator *dbo = malloc(sizeof(DbOperator));
   if (dbo == NULL) {
     log_err("L%d: parse_print failed. malloc for DbOperator failed\n", __LINE__);
     return NULL;
   }
-
   dbo->type = PRINT;
-  dbo->operator_fields.print_operator.handle_to_print = handle;
+
+  // Count number of columns by counting commas
+  size_t num_columns = 1;
+  for (char *p = handle; *p; p++) {
+    if (*p == ',') num_columns++;
+  }
+
+  // Allocate array of Column pointers
+  Column **columns = malloc(num_columns * sizeof(Column *));
+  if (columns == NULL) {
+    free(dbo);
+    log_err("L%d: parse_print failed. malloc for columns array failed\n", __LINE__);
+    return NULL;
+  }
+  dbo->operator_fields.print_operator.columns = columns;
+  dbo->operator_fields.print_operator.num_columns = num_columns;
+
+  // Parse each column name and get its handle
+  char *token = strtok(handle, ",");
+  size_t i = 0;
+
+  while (token != NULL && i < num_columns) {
+    // Remove leading/trailing whitespace
+    char *trimmed = token;
+    while (isspace(*trimmed)) trimmed++;
+    char *end = trimmed + strlen(trimmed) - 1;
+    while (end > trimmed && isspace(*end)) end--;
+    *(end + 1) = '\0';
+
+    // Get column handle
+    Column *col = get_handle(trimmed);
+    cs165_log(stdout, "handle_to_print: got column %s at %p from variable pool\n",
+              trimmed, col);
+    if (col == NULL) {
+      log_err("L%d: parse_print failed. Invalid column handle: %s\n", __LINE__, trimmed);
+      free(columns);
+      free(dbo);
+      return NULL;
+    }
+    columns[i++] = col;
+    token = strtok(NULL, ",");
+  }
 
   cs165_log(stdout, "handle_to_print: %s\n", handle);
   log_info("Successfully parsed print command\n");
