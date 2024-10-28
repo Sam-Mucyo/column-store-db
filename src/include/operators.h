@@ -76,6 +76,7 @@ typedef struct LoadOperator {
  **/
 typedef struct Comparator {
   Column *col;      // the column to compare against.
+  int *ref_posns;   // original positions of the values in the column.
   long int p_low;   // used in equality and ranges.
   long int p_high;  // used in range compares.
   ComparatorType type1;

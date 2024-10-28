@@ -1,3 +1,5 @@
+#include <limits.h>
+
 #include "client_context.h"
 #include "query_exec.h"
 #include "utils.h"
@@ -52,6 +54,13 @@ void exec_arithmetic(DbOperator *query, message *send_message) {
   Column *col2 = query->operator_fields.arithmetic_operator.col2;
   cs165_log(stdout, "Executing arithmetic on columns: %s, %s\n", col1->name, col2->name);
 
+  //   We currently only support ADD and SUB over integer columns
+  if (col1->data_type != INT || col2->data_type != INT) {
+    handle_error(send_message,
+                 "Arithmetic operations are only supported on integer columns");
+    log_err("L%d in handle_arithmetic: %s\n", __LINE__, send_message->payload);
+  }
+
   // Create a new Column to store the result
   Column *res_col;
   if (create_new_handle(query->operator_fields.arithmetic_operator.res_handle,
@@ -65,22 +74,29 @@ void exec_arithmetic(DbOperator *query, message *send_message) {
     free(res_col);
     handle_error(send_message, "Failed to allocate memory for result data");
   }
-
-  //   We currently only support ADD and SUB over integer columns
-  if (col1->data_type != INT || col2->data_type != INT) {
-    handle_error(send_message,
-                 "Arithmetic operations are only supported on integer columns");
-    log_err("L%d in handle_arithmetic: %s\n", __LINE__, send_message->payload);
-  }
+  //   initialize stats
+  res_col->min_value = INT_MAX;
+  res_col->max_value = INT_MIN;
+  res_col->sum = 0;
 
   // Perform the arithmetic operation
   if (query->type == ADD) {
     for (size_t i = 0; i < col1->num_elements; i++) {
       ((int *)res_col->data)[i] = ((int *)col1->data)[i] + ((int *)col2->data)[i];
+      int val = ((int *)res_col->data)[i];
+
+      res_col->sum += val;
+      res_col->min_value = val < res_col->min_value ? val : res_col->min_value;
+      res_col->max_value = val > res_col->max_value ? val : res_col->max_value;
     }
   } else if (query->type == SUB) {
     for (size_t i = 0; i < col1->num_elements; i++) {
       ((int *)res_col->data)[i] = ((int *)col1->data)[i] - ((int *)col2->data)[i];
+      int val = ((int *)res_col->data)[i];
+      // TODO: for maintainability, consider refactoring this in
+      res_col->sum += val;
+      res_col->min_value = val < res_col->min_value ? val : res_col->min_value;
+      res_col->max_value = val > res_col->max_value ? val : res_col->max_value;
     }
   } else {
     handle_error(send_message, "Unsupported arithmetic operation");
