@@ -9,6 +9,7 @@
 #define _DEFAULT_SOURCE
 #include "parse.h"
 
+#include <assert.h>
 #include <ctype.h>
 #include <limits.h>
 #include <stdbool.h>
@@ -389,6 +390,17 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
   }
 }
 
+Column *get_chandle_or_dbtblcol(char *name) {
+  Column *col = NULL;
+  // NOTE: based on project language, we can assume column names include dots
+  if (strchr(name, '.') != NULL) {
+    col = get_column_from_catalog(name);  // get the column from the catalog
+  } else {
+    col = get_handle(name);  // from client context (variable pool)
+  }
+  return col;
+}
+
 /**
  * @brief parse_select
  * This method takes in a string representing the arguments to select from a table, parses
@@ -405,6 +417,22 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
 DbOperator *parse_select(char *query_command, char *handle) {
   message_status status = OK_DONE;
   char **command_index = &query_command;
+
+  // trim parenthesis using `trim_parenthesis` function
+  trim_parenthesis(query_command);
+  trim_whitespace(query_command);
+
+  // count number of commas in the query to determine the type of select query
+  int comma_count = 0;
+  for (int i = 0; query_command[i] != '\0'; i++) {
+    if (query_command[i] == ',') {
+      comma_count++;
+    }
+  }
+  char *posn_vec = NULL;
+  if (comma_count == 3) {  // Type 2: (<posn_vec>,<val_vec>,<low>,<high>)
+    posn_vec = next_token(command_index, &status);
+  }
 
   char *db_tbl_col_name = next_token(command_index, &status);
   if (status == INCORRECT_FORMAT) return NULL;
@@ -431,7 +459,7 @@ DbOperator *parse_select(char *query_command, char *handle) {
   if (status == INCORRECT_FORMAT) {
     return NULL;
   }
-  if (strcmp(high_str, "null)") == 0) {
+  if (strcmp(high_str, "null") == 0) {
     dbo->operator_fields.select_operator.comparator->type2 = NO_COMPARISON;
   } else {
     dbo->operator_fields.select_operator.comparator->type2 = LESS_THAN;
@@ -442,14 +470,39 @@ DbOperator *parse_select(char *query_command, char *handle) {
 
   // Try getting column from catalog manager
   cs165_log(stdout, "parse_select: getting column %s from catalog\n", db_tbl_col_name);
-  Column *col = get_column_from_catalog(db_tbl_col_name);
+  Column *col = get_chandle_or_dbtblcol(db_tbl_col_name);
   if (!col) {
     db_operator_free(dbo);
     return NULL;
   }
   cs165_log(stdout, "parse_select: got column %s\n", col->name);
   dbo->operator_fields.select_operator.comparator->col = col;
+  dbo->operator_fields.select_operator.comparator->ref_posns = NULL;
   dbo->operator_fields.select_operator.res_handle = handle;
+
+  // If posn_vec is not NULL, then we have a type 2 select query
+  if (posn_vec) {
+    Column *posn_col = get_handle(posn_vec);
+    if (!posn_col) {
+      db_operator_free(dbo);
+      log_err("L%d: parse_select: posn_vec %s not found\n", __LINE__, posn_vec);
+      return NULL;
+    }
+    // assert that all posns in posn_col are valid indices (all non-negative)
+    // cs165_log(stdout, "parse_select: got posn_vec %s\n", posn_vec);
+    // cs165_log(stdout, "parse_select: sanity checking posn_vec\n");
+    // assert(posn_col->data_type == INT);
+    // assert(posn_col->num_elements == col->num_elements);
+    // for (size_t i = 0; i < posn_col->num_elements; i++) {
+    //   if (((int *)posn_col->data)[i] < 0) {
+    //     db_operator_free(dbo);
+    //     log_err("L%d: parse_select: invalid posn_vec %s\n", __LINE__, posn_vec);
+    //     return NULL;
+    //   }
+    // }
+    // log_info("parse_select: posn_vec sanity check passed\n");
+    dbo->operator_fields.select_operator.comparator->ref_posns = posn_col->data;
+  }
 
   return dbo;
 }
@@ -501,17 +554,6 @@ DbOperator *parse_fetch(char *query_command, char *fetch_handle) {
   dbo->operator_fields.fetch_operator.col = col;
   log_info("Successfully parsed fetch command\n");
   return dbo;
-}
-
-Column *get_chandle_or_dbtblcol(char *name) {
-  Column *col = NULL;
-  // NOTE: based on project language, we can assume column names include dots
-  if (strchr(name, '.') != NULL) {
-    col = get_column_from_catalog(name);  // get the column from the catalog
-  } else {
-    col = get_handle(name);  // from client context (variable pool)
-  }
-  return col;
 }
 
 /**
@@ -604,28 +646,68 @@ DbOperator *parse_arithmetic(char *query_command, char *handle, OperatorType typ
   return dbo;
 }
 
+/**
+ * @brief Parses a comma-separated list of column names and creates a print operator
+ * Example input: (<vec_val1>,<vec_val2>,...)
+ *
+ * @param query_command String containing comma-separated column names in parentheses
+ * @return DbOperator* Print operator on success, NULL on failure
+ */
 DbOperator *parse_print(char *query_command) {
   cs165_log(stdout, "L%d: parse_print received: %s\n", __LINE__, query_command);
 
-  // get the fetch handle "print(f1)" -> "f1"
-  const char *start = strchr(query_command, '(');
-  if (start == NULL) {
-    log_err("L%d: parse_print failed. incorrect format\n", __LINE__);
-    return NULL;
-  }
-  start++;
-  char *handle = strndup(start, strchr(start, ')') - start);
-
+  char *handle = trim_parenthesis(query_command);
   cs165_log(stdout, "fetch_handle: %s\n", handle);
 
+  // Allocate DbOperator
   DbOperator *dbo = malloc(sizeof(DbOperator));
   if (dbo == NULL) {
     log_err("L%d: parse_print failed. malloc for DbOperator failed\n", __LINE__);
     return NULL;
   }
-
   dbo->type = PRINT;
-  dbo->operator_fields.print_operator.handle_to_print = handle;
+
+  // Count number of columns by counting commas
+  size_t num_columns = 1;
+  for (char *p = handle; *p; p++) {
+    if (*p == ',') num_columns++;
+  }
+
+  // Allocate array of Column pointers
+  Column **columns = malloc(num_columns * sizeof(Column *));
+  if (columns == NULL) {
+    free(dbo);
+    log_err("L%d: parse_print failed. malloc for columns array failed\n", __LINE__);
+    return NULL;
+  }
+  dbo->operator_fields.print_operator.columns = columns;
+  dbo->operator_fields.print_operator.num_columns = num_columns;
+
+  // Parse each column name and get its handle
+  char *token = strtok(handle, ",");
+  size_t i = 0;
+
+  while (token != NULL && i < num_columns) {
+    // Remove leading/trailing whitespace
+    char *trimmed = token;
+    while (isspace(*trimmed)) trimmed++;
+    char *end = trimmed + strlen(trimmed) - 1;
+    while (end > trimmed && isspace(*end)) end--;
+    *(end + 1) = '\0';
+
+    // Get column handle
+    Column *col = get_handle(trimmed);
+    cs165_log(stdout, "handle_to_print: got column %s at %p from variable pool\n",
+              trimmed, col);
+    if (col == NULL) {
+      log_err("L%d: parse_print failed. Invalid column handle: %s\n", __LINE__, trimmed);
+      free(columns);
+      free(dbo);
+      return NULL;
+    }
+    columns[i++] = col;
+    token = strtok(NULL, ",");
+  }
 
   cs165_log(stdout, "handle_to_print: %s\n", handle);
   log_info("Successfully parsed print command\n");

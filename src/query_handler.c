@@ -7,7 +7,7 @@
 #include "query_exec.h"
 #include "utils.h"
 
-void handle_print(DbOperator *query, message *send_message);
+char *handle_print(DbOperator *query);
 
 /**
  * @brief execute_DbOperator
@@ -27,9 +27,16 @@ void handle_dbOperator(DbOperator *query, message *send_message) {
     case FETCH:
       exec_fetch(query, send_message);
       break;
-    case PRINT:
-      handle_print(query, send_message);
-      break;
+    case PRINT: {
+      char *result = handle_print(query);
+      if (!result) {
+        handle_error(send_message, "Failed to print columns");
+        return;
+      }
+      send_message->status = OK_DONE;
+      send_message->length = strlen(result);
+      send_message->payload = result;
+    } break;
     case AVG:
     case MIN:
     case MAX:
@@ -50,64 +57,83 @@ void handle_dbOperator(DbOperator *query, message *send_message) {
   db_operator_free(query);
 }
 
-void handle_print(DbOperator *query, message *send_message) {
+/**
+ * @brief Executes a print operation by constructing a string representation
+ * of the columns in row-major format
+ *
+ * @param query DbOperator containing the print operation
+ * @return char* Allocated string containing the formatted output
+ */
+char *handle_print(DbOperator *query) {
+  cs165_log(stdout, "handle_print: starting\n");
   PrintOperator *print_op = &query->operator_fields.print_operator;
-  cs165_log(stdout, "Executing print query:\nhandle_to_print: %s\n",
-            print_op->handle_to_print);
-
-  // Get the GeneralizedColumn from the handle
-  Column *col = get_handle(print_op->handle_to_print);
-  if (!col) {
-    handle_error(send_message, "Invalid handle\n");
-    log_err("L%d in handle_print: %s\n", __LINE__, send_message->payload);
-    return;
-  }
-  if (col->data_type != INT && col->data_type != FLOAT) {
-    handle_error(send_message, "Unsupported column data type");
-    log_err("L%d in handle_print: %s\n", __LINE__, send_message->payload);
-    return;
+  if (!print_op || !print_op->columns || print_op->num_columns == 0) {
+    log_err("L%d: handle_print failed. No columns to print\n", __LINE__);
+    return NULL;
   }
 
-  // Allocate an initial buffer for the result string
-  size_t buffer_size = 1024;  // Initial size, will be increased if needed
-  char *result_string = malloc(buffer_size);
-  if (!result_string) {
-    handle_error(send_message, "Failed to allocate memory for result string");
-    log_err("L%d in handle_print: %s\n", __LINE__, send_message->payload);
-    return;
-  }
+  //   cs165_log(stdout, "handle_print: num_columns: %zu\n", print_op->num_columns);
+  //   cs165_log(stdout, "handle_print: print_op->columns[0].name: %s\n",
+  //             print_op->columns[0]->name);
+  // All columns should have the same number of elements
+  size_t num_rows = print_op->columns[0]->num_elements;
 
-  size_t current_pos = 0;
+  // Calculate required buffer size (estimate)
+  // Assume max 20 chars per number plus separator and newline
+  size_t buffer_size = (num_rows * print_op->num_columns * 21) + 1;
+  char *result = malloc(buffer_size);
+  if (!result) return NULL;
 
-  for (size_t i = 0; i < col->num_elements; i++) {
-    // Ensure we have enough space in the buffer
-    if (current_pos + 20 > buffer_size) {
-      buffer_size *= 2;
-      char *new_buffer = realloc(result_string, buffer_size);
-      if (!new_buffer) {
-        free(result_string);
-        handle_error(send_message, "Failed to reallocate memory for result string");
-        return;
+  char *current = result;
+  size_t remaining = buffer_size;
+
+  //   cs165_log(stdout, "handle_print: scanning columns\n");
+  // Print each row
+  for (size_t row = 0; row < num_rows; row++) {
+    // Print each column's value in the current row
+    for (size_t col = 0; col < print_op->num_columns; col++) {
+      cs165_log(stdout, "handle_print: col: %zu, row: %zu\n", col, row);
+      Column *column = print_op->columns[col];
+      int printed;
+
+      // Print value based on data type
+      if (column->data_type == INT) {
+        int *data = (int *)column->data;
+        printed = snprintf(current, remaining, "%d", data[row]);
+      } else if (column->data_type == LONG) {
+        long *data = (long *)column->data;
+        printed = snprintf(current, remaining, "%ld", data[row]);
+      } else if (column->data_type == FLOAT) {
+        float *data = (float *)column->data;
+        printed = snprintf(current, remaining, "%g", data[row]);
+      } else {
+        log_err("handle_print: Unsupported data type\n");
+        free(result);
+        return NULL;
       }
-      result_string = new_buffer;
+
+      if (printed < 0 || printed >= remaining) {
+        free(result);
+        return NULL;
+      }
+
+      current += printed;
+      remaining -= printed;
+
+      // Add separator (except for last column)
+      if (col < print_op->num_columns - 1 && remaining > 1) {
+        *current++ = ',';
+        remaining--;
+      }
     }
 
-    // Add the number to the string
-    if (col->data_type == INT) {
-      current_pos += sprintf(result_string + current_pos, "%d\n", ((int *)col->data)[i]);
-    } else if (col->data_type == FLOAT) {
-      current_pos +=
-          sprintf(result_string + current_pos, "%g\n", ((double *)col->data)[i]);
+    // Add newline (except for last row)
+    if (row < num_rows - 1 && remaining > 1) {
+      *current++ = '\n';
+      remaining--;
     }
   }
-
-  // Null-terminate the string
-  result_string[current_pos] = '\0';
-
-  // Store the result string in the status
-  send_message->payload = result_string;
-  send_message->length = strlen(send_message->payload);
-
-  log_info("Print operation completed successfully.\n");
-  return;
+  *current = '\0';
+  cs165_log(stdout, "handle_print: done\n");
+  return result;
 }

@@ -8,8 +8,7 @@
 #include "utils.h"
 
 // Function prototypes
-size_t select_values_basic(const int *data, size_t num_elements, ComparatorType type1,
-                           int p_low, ComparatorType type2, int p_high,
+size_t select_values_basic(const int *data, size_t num_elements, Comparator *comparator,
                            int *result_indices);
 /**
  * @brief exec_select
@@ -25,6 +24,12 @@ void exec_select(DbOperator *query, message *send_message) {
   SelectOperator *select_op = &query->operator_fields.select_operator;
   Comparator *comparator = select_op->comparator;
   Column *column = comparator->col;
+  int *pos_vec = comparator->ref_posns;
+
+  if (pos_vec) {
+    log_err("exec_select: received pos_vec with values: %d, %d, ...\n", pos_vec[0],
+            pos_vec[1]);
+  }
 
   // Create a new Column to store the result indices
   Column *result;
@@ -50,9 +55,8 @@ void exec_select(DbOperator *query, message *send_message) {
   }
 
   cs165_log(stdout, "exec_select: Starting to scan\n");
-  result->num_elements = select_values_basic(
-      column->data, column->num_elements, comparator->type1, comparator->p_low,
-      comparator->type2, comparator->p_high, result->data);
+  result->num_elements =
+      select_values_basic(column->data, column->num_elements, comparator, result->data);
 
   //   cs165_log(stdout, "Selected %d indices: \n", result->num_elements);
   //   for (size_t i = 0; i < result->num_elements; i++) {
@@ -89,14 +93,24 @@ int compare(ComparatorType type, long int p, int value) {
 }
 
 // Basic selection function (initial version)
-size_t select_values_basic(const int *data, size_t num_elements, ComparatorType type1,
-                           int p_low, ComparatorType type2, int p_high,
+size_t select_values_basic(const int *data, size_t num_elements, Comparator *comparator,
                            int *result_indices) {
-  size_t result_count = 0;
   if (result_indices == NULL) {
     log_err("select_values_basic: result_indices is NULL\n");
     return -1;
   }
+
+  ComparatorType type1 = comparator->type1;
+  ComparatorType type2 = comparator->type2;
+  long int p_low = comparator->p_low;
+  long int p_high = comparator->p_high;
+  int *ref_posns = comparator->ref_posns;
+  if (ref_posns) {
+    cs165_log(stdout, "select_values_basic: ref_posns: %d, %d, ...\n", ref_posns[0],
+              ref_posns[1]);
+  }
+
+  size_t result_count = 0;
 
   for (size_t i = 0; i < num_elements; i++) {
     int value = data[i];
@@ -121,7 +135,7 @@ size_t select_values_basic(const int *data, size_t num_elements, ComparatorType 
 
     if (include) {
       //   cs165_log(stdout, "including value %d\n", value);
-      result_indices[result_count++] = i;
+      result_indices[result_count++] = ref_posns ? ref_posns[i] : i;
     }
   }
 
