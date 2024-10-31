@@ -1,9 +1,9 @@
-#include "query_handler.h"
+#include "handler.h"
 
 #include <string.h>
 
 #include "client_context.h"
-#include "include/operators.h"
+#include "operators.h"
 #include "query_exec.h"
 #include "utils.h"
 
