@@ -21,32 +21,31 @@ void exec_aggr(DbOperator *query, message *send_message) {
   }
   cs165_log(stdout, "added new handle: %s\n", aggr_op->res_handle);
 
-  res_col->data = malloc(sizeof(float));
-  if (!res_col->data) {
-    free(res_col);
-    handle_error(send_message, "Failed to allocate memory for result data");
-  }
-
   if (query->type == AVG) {
+    res_col->data = malloc(sizeof(float));
     *((float *)res_col->data) =
         col->num_elements == 0 ? 0.0 : (float)col->sum / col->num_elements;
+    res_col->data_type = FLOAT;
   } else if (query->type == MIN) {
-    *((float *)res_col->data) = col->min_value;
+    res_col->data = malloc(sizeof(long));
+    *((long *)res_col->data) = col->min_value;
+    res_col->data_type = LONG;
   } else if (query->type == MAX) {
-    *((float *)res_col->data) = col->max_value;
+    res_col->data = malloc(sizeof(long));
+    *((long *)res_col->data) = col->max_value;
+    res_col->data_type = LONG;
   } else if (query->type == SUM) {
-    *((float *)res_col->data) = col->sum;
+    res_col->data = malloc(sizeof(long));
+    *((long *)res_col->data) = col->sum;
+    res_col->data_type = LONG;
   } else {
     handle_error(send_message, "Unsupported aggregate operation");
     log_err("L%d in handle_aggr: %s\n", __LINE__, send_message->payload);
   }
-  res_col->data_type = FLOAT;
   res_col->num_elements = 1;
   send_message->status = OK_DONE;
   send_message->payload = "Done";
   send_message->length = strlen(send_message->payload);
-  log_info("Aggregate operation completed for %s, with result %f\n", col->name,
-           *((float *)res_col->data));
 }
 
 void exec_arithmetic(DbOperator *query, message *send_message) {

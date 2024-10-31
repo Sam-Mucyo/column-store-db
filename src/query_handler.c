@@ -94,7 +94,7 @@ char *handle_print(DbOperator *query) {
     for (size_t col = 0; col < print_op->num_columns; col++) {
       cs165_log(stdout, "handle_print: col: %zu, row: %zu\n", col, row);
       Column *column = print_op->columns[col];
-      int printed;
+      size_t printed;
 
       // Print value based on data type
       if (column->data_type == INT) {
@@ -105,14 +105,14 @@ char *handle_print(DbOperator *query) {
         printed = snprintf(current, remaining, "%ld", data[row]);
       } else if (column->data_type == FLOAT) {
         float *data = (float *)column->data;
-        printed = snprintf(current, remaining, "%g", data[row]);
+        printed = snprintf(current, remaining, "%f", data[row]);
       } else {
         log_err("handle_print: Unsupported data type\n");
         free(result);
         return NULL;
       }
 
-      if (printed < 0 || printed >= remaining) {
+      if (printed >= remaining) {
         free(result);
         return NULL;
       }

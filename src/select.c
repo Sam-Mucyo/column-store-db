@@ -24,12 +24,6 @@ void exec_select(DbOperator *query, message *send_message) {
   SelectOperator *select_op = &query->operator_fields.select_operator;
   Comparator *comparator = select_op->comparator;
   Column *column = comparator->col;
-  int *pos_vec = comparator->ref_posns;
-
-  if (pos_vec) {
-    log_err("exec_select: received pos_vec with values: %d, %d, ...\n", pos_vec[0],
-            pos_vec[1]);
-  }
 
   // Create a new Column to store the result indices
   Column *result;
@@ -58,13 +52,6 @@ void exec_select(DbOperator *query, message *send_message) {
   result->num_elements =
       select_values_basic(column->data, column->num_elements, comparator, result->data);
 
-  //   cs165_log(stdout, "Selected %d indices: \n", result->num_elements);
-  //   for (size_t i = 0; i < result->num_elements; i++) {
-  //     printf("%d, ", ((int *)result->data)[i]);
-  //   }
-  printf("\n");
-
-  //   Add logging info
   log_info("exec_select: Selection operation completed successfully.\n");
 
   //   set send_message
@@ -135,7 +122,7 @@ size_t select_values_basic(const int *data, size_t num_elements, Comparator *com
 
     if (include) {
       //   cs165_log(stdout, "including value %d\n", value);
-      result_indices[result_count++] = ref_posns ? ref_posns[i] : i;
+      result_indices[result_count++] = ref_posns ? (size_t)ref_posns[i] : i;
     }
   }
 
