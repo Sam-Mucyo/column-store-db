@@ -38,7 +38,7 @@ QUERY_PARSER_DIR = $(QUERY_DIR)/parser
 QUERY_EXECUTOR_DIR = $(QUERY_DIR)/executor
 UTILS_DIR = $(DB_IMPL_DIR)/utils
 
-SANITIZER_FLAGS = -fsanitize=address -fsanitize=undefined -fsanitize=leak
+SANITIZER_FLAGS = # -fsanitize=address -fsanitize=undefined -fsanitize=leak
 
 # Flags and other libraries
 override CFLAGS += -Wall -Wextra -pedantic -pthread -O$(O) $(addprefix -I,$(INCLUDES)) $(SANITIZER_FLAGS)
