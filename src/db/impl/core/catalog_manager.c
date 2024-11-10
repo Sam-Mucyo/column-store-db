@@ -306,6 +306,7 @@ Status shutdown_catalog_manager(void) {
 
   free(current_db->tables);
   fclose(meta_file);
+  free(current_db);
 
   cs165_log(stdout, "Metadata written and catalog manager shut down.\n");
   return (Status){OK, "Catalog manager: database closed and metadata saved"};
