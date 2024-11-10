@@ -1,1 +1,1 @@
-#TODO
+void placeholder_threadpool_c() {}

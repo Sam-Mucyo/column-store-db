@@ -38,8 +38,10 @@ QUERY_PARSER_DIR = $(QUERY_DIR)/parser
 QUERY_EXECUTOR_DIR = $(QUERY_DIR)/executor
 UTILS_DIR = $(DB_IMPL_DIR)/utils
 
+SANITIZER_FLAGS = -fsanitize=address -fsanitize=undefined -fsanitize=leak
+
 # Flags and other libraries
-override CFLAGS += -Wall -Wextra -pedantic -pthread -O$(O) $(addprefix -I,$(INCLUDES))
+override CFLAGS += -Wall -Wextra -pedantic -pthread -O$(O) $(addprefix -I,$(INCLUDES)) $(SANITIZER_FLAGS)
 LDFLAGS =
 LIBS =
 
@@ -93,7 +95,7 @@ UTILS_OBJS = $(UTILS_SRCS:.c=.o)
 LIB_SRCS = $(wildcard $(LIB_IMPL_DIR)/*.c)
 
 #TODO: To be uncommented when we have datastructures implemented
-LIB_OBJS =  # $(LIB_SRCS:.c=.o)
+LIB_OBJS =  $(LIB_SRCS:.c=.o)
 
 ####### Build Rules #######
 # Create .deps subdirectories to match source tree
@@ -131,4 +133,3 @@ clean:
 distclean: clean
 	rm -rf $(DEPSDIR)
 
-.PHONY: all clean distclean print-%
