@@ -130,6 +130,7 @@ Status init_db_from_disk(void) {
           for (size_t j = 0; j < table->num_cols; j++) {
             Column *col = &table->columns[j];
             size_t num_elements;
+            col->data_type = INT;  // Default to INT for the scope of this project
             long min_value, max_value, sum;
             if (fscanf(meta_file,
                        "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%"

@@ -22,10 +22,10 @@ void exec_aggr(DbOperator *query, message *send_message) {
   cs165_log(stdout, "added new handle: %s\n", aggr_op->res_handle);
 
   if (query->type == AVG) {
-    res_col->data = malloc(sizeof(float));
-    *((float *)res_col->data) =
-        col->num_elements == 0 ? 0.0 : (float)col->sum / col->num_elements;
-    res_col->data_type = FLOAT;
+    res_col->data = malloc(sizeof(double));
+    *((double *)res_col->data) =
+        col->num_elements == 0 ? 0.0 : (double)col->sum / col->num_elements;
+    res_col->data_type = DOUBLE;
   } else if (query->type == MIN) {
     res_col->data = malloc(sizeof(long));
     *((long *)res_col->data) = col->min_value;

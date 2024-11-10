@@ -103,8 +103,8 @@ char *handle_print(DbOperator *query) {
       } else if (column->data_type == LONG) {
         long *data = (long *)column->data;
         printed = snprintf(current, remaining, "%ld", data[row]);
-      } else if (column->data_type == FLOAT) {
-        float *data = (float *)column->data;
+      } else if (column->data_type == DOUBLE) {
+        double *data = (double *)column->data;
         printed = snprintf(current, remaining, "%f", data[row]);
       } else {
         log_err("handle_print: Unsupported data type\n");

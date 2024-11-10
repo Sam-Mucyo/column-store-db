@@ -40,7 +40,7 @@ typedef struct ColumnMetadata {
  * in place of int* in db_operator simliar to the way IndexType supports
  * additional types.
  **/
-typedef enum DataType { INT, LONG, FLOAT } DataType;
+typedef enum DataType { INT, LONG, DOUBLE } DataType;
 
 /**
  * Error codes used to indicate the outcome of an API call
