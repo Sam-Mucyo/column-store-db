@@ -130,6 +130,7 @@ Status init_db_from_disk(void) {
           for (size_t j = 0; j < table->num_cols; j++) {
             Column *col = &table->columns[j];
             size_t num_elements;
+            col->data_type = INT;  // Default to INT for the scope of this project
             long min_value, max_value, sum;
             if (fscanf(meta_file,
                        "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%"
@@ -306,6 +307,7 @@ Status shutdown_catalog_manager(void) {
 
   free(current_db->tables);
   fclose(meta_file);
+  free(current_db);
 
   cs165_log(stdout, "Metadata written and catalog manager shut down.\n");
   return (Status){OK, "Catalog manager: database closed and metadata saved"};

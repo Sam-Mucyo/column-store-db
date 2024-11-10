@@ -45,8 +45,8 @@ SOFTWARE.
 #include "catalog_manager.h"
 #include "client_context.h"
 #include "common.h"
+#include "handler.h"
 #include "parse.h"
-#include "query_handler.h"
 #include "utils.h"
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024

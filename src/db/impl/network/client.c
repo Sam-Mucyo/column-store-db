@@ -276,6 +276,7 @@ int send_column_data(int socket, const char *csv_filename) {
     metadata[i].num_elements = 0;
     metadata[i].min_value = INT_MAX;
     metadata[i].max_value = INT_MIN;
+    metadata[i].sum = 0;
     column_data[i] = malloc(num_rows * sizeof(int));
   }
 
