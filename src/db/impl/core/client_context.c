@@ -8,7 +8,7 @@
 
 #include "utils.h"
 
-#define INITIAL_CHANDLE_SLOTS 10
+#define INITIAL_CHANDLE_SLOTS 1000
 #define GROWTH_FACTOR 2
 #define MIN_SLOTS 4
 
@@ -89,6 +89,10 @@ int create_new_handle(const char *name, Column **out_column) {
   // Check if resize needed
   if (g_client_context->chandles_in_use >= g_client_context->chandle_slots) {
     size_t new_size = g_client_context->chandle_slots * GROWTH_FACTOR;
+
+    // TODO: Fix the issue that the actual columns gets freed and not copied back into
+    // the new memory. To reproduce the issue, use a small INITIAL_CHANDLE_SLOTS value
+    // Currently, using larger INITIAL_CHANDLE_SLOTS value to avoid the issue.
     Column *new_table =
         (Column *)realloc(g_client_context->chandle_table, new_size * sizeof(Column));
     if (!new_table) {
