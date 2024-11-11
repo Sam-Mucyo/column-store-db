@@ -174,6 +174,7 @@ Status init_db_from_disk(void) {
               close(col->disk_fd);
               continue;
             }
+            log_info("Loaded in col %s with %d numbers.\n", col->name, col->num_elements);
           }
         }
 
@@ -283,10 +284,12 @@ Status shutdown_catalog_manager(void) {
               col->name, col->num_elements, col->min_value, col->max_value, col->sum);
 
       if (col->is_dirty) {
-        if (ftruncate(col->disk_fd, col->mmap_size) == -1) {
+        // Only truncate and sync the actual data size
+        size_t actual_size = col->num_elements * sizeof(int);
+        if (ftruncate(col->disk_fd, actual_size) == -1) {
           log_err("Error truncating column data file");
         }
-        if (msync(col->data, col->mmap_size, MS_SYNC) == -1) {
+        if (msync(col->data, actual_size, MS_SYNC) == -1) {
           log_err("Error syncing memory to disk");
         }
       }

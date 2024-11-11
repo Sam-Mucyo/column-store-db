@@ -92,7 +92,7 @@ char *handle_print(DbOperator *query) {
   for (size_t row = 0; row < num_rows; row++) {
     // Print each column's value in the current row
     for (size_t col = 0; col < print_op->num_columns; col++) {
-      cs165_log(stdout, "handle_print: col: %zu, row: %zu\n", col, row);
+      //   cs165_log(stdout, "handle_print: col: %zu, row: %zu\n", col, row);
       Column *column = print_op->columns[col];
       size_t printed;
 
