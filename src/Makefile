@@ -127,9 +127,8 @@ clean:
 	rm -f client server $(CORE_OBJS) $(NETWORK_OBJS) $(QUERY_OBJS) $(UTILS_OBJS) $(LIB_OBJS)
 	rm -f *~ *.bak core *.core $(SOCK_PATH)
 	rm -rf .deps
-	rm -r disk
-	rm -f *.bin
 
 distclean: clean
 	rm -rf $(DEPSDIR)
-
+	rm -r disk
+	rm -f *.bin
