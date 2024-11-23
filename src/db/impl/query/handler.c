@@ -45,6 +45,7 @@ void handle_query(char *query, message *send_message, int client_socket,
 void handle_dbOperator(DbOperator *query, message *send_message) {
   switch (query->type) {
     case CREATE:
+    case CREATE_INDEX:
       exec_create(query, send_message);
       break;
     case SELECT: {

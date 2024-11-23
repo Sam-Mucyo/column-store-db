@@ -5,42 +5,6 @@
 #include "common.h"
 
 /*
- * tells the databaase what type of operator this is
- */
-typedef enum OperatorType {
-  CREATE,
-  INSERT,
-  LOAD,
-  EXEC_BATCH,
-  SELECT,
-  FETCH,
-  PRINT,
-  AVG,
-  MIN,
-  MAX,
-  SUM,
-  ADD,
-  SUB,
-  SHUTDOWN,
-} OperatorType;
-
-// Defines a comparator flag between two values.
-typedef enum ComparatorType {
-  NO_COMPARISON = 0,
-  LESS_THAN = 1,
-  GREATER_THAN = 2,
-  EQUAL = 4,
-  LESS_THAN_OR_EQUAL = 5,
-  GREATER_THAN_OR_EQUAL = 6
-} ComparatorType;
-
-typedef enum CreateType {
-  _DB,
-  _TABLE,
-  _COLUMN,
-} CreateType;
-
-/*
  * necessary fields for creation
  * "create_type" indicates what kind of object you are creating.
  * For example, if create_type == _DB, the operator should create a db named <<name>>
@@ -56,6 +20,11 @@ typedef struct CreateOperator {
   Table *table;
   int col_count;
 } CreateOperator;
+
+typedef struct CreateIndexOperator {
+  Column *col;
+  IndexType idx_type;
+} CreateIndexOperator;
 
 /*
  * necessary fields for insertion
@@ -116,6 +85,7 @@ typedef struct PrintOperator {
  */
 typedef union OperatorFields {
   CreateOperator create_operator;
+  CreateIndexOperator create_index_operator;
   InsertOperator insert_operator;
   LoadOperator load_operator;
   SelectOperator select_operator;
