@@ -11,6 +11,7 @@ typedef enum OperatorType {
   CREATE,
   INSERT,
   LOAD,
+  EXEC_BATCH,
   SELECT,
   FETCH,
   PRINT,

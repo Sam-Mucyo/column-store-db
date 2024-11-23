@@ -46,12 +46,14 @@ void db_operator_free(DbOperator *dbo) {
       break;
   }
 
-  if (dbo->context != NULL) {
-    if (dbo->context->chandle_table != NULL) {
-      free(dbo->context->chandle_table);
-    }
-    free(dbo->context);
-  }
+  // NOTE: not to free the context here, as it is shared across multiple operators
+  // especially when batching queries
+  //   if (dbo->context != NULL) {
+  //     if (dbo->context->chandle_table != NULL) {
+  //       free(dbo->context->chandle_table);
+  //     }
+  //     free(dbo->context);
+  //   }
 
   free(dbo);
 }

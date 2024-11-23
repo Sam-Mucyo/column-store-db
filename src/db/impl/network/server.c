@@ -46,7 +46,6 @@ SOFTWARE.
 #include "client_context.h"
 #include "common.h"
 #include "handler.h"
-#include "parse.h"
 #include "utils.h"
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024
@@ -69,6 +68,7 @@ void handle_client(int client_socket, int *shutdown) {
 
   // create the client context here
   ClientContext *client_context = NULL;
+  client_context = g_client_context;
 
   // Continually receive messages from client and execute queries.
   // 1. Parse the command
@@ -93,18 +93,9 @@ void handle_client(int client_socket, int *shutdown) {
       length = recv(client_socket, recv_buffer, recv_message.length, 0);
       recv_message.payload = recv_buffer;
       recv_message.payload[recv_message.length] = '\0';
-
       cs165_log(stdout, "Received message: %s\n", recv_message.payload);
 
-      // 1. Parse command
-      //    Query string is converted into a request for an database operator
-      DbOperator *query = parse_command(recv_message.payload, &send_message,
-                                        client_socket, client_context);
-      // 2. Handle request
-      //    Corresponding database operator is executed over the query
-      // TODO: Make the `execute_DbOperator` return a `message` struct, the status
-      // depends on the query
-      if (query) handle_dbOperator(query, &send_message);
+      handle_query(recv_message.payload, &send_message, client_socket, client_context);
     }
 
     // 3. Send status of the received message (OK, UNKNOWN_QUERY, etc)
@@ -113,7 +104,8 @@ void handle_client(int client_socket, int *shutdown) {
     }
 
     // 4. Send response to the request
-    if (send(client_socket, send_message.payload, send_message.length, 0) == -1) {
+    if (send_message_safe(client_socket, send_message.payload, send_message.length) ==
+        -1) {
       log_err("Failed to send message.");
     }
   }

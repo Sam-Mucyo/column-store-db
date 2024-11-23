@@ -14,6 +14,8 @@ void exec_create(DbOperator *query, message *send_message);
 
 // Executes a select query
 void exec_select(DbOperator *query, message *send_message);
+void exec_batch_select(DbOperator *query, message *send_message);
+
 // Executes a fetch query
 void exec_fetch(DbOperator *query, message *send_message);
 

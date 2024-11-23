@@ -1,13 +1,39 @@
 #include "handler.h"
 
 #include <string.h>
+#include <sys/time.h>
+#include <time.h>
 
-#include "client_context.h"
-#include "operators.h"
-#include "query_exec.h"
-#include "utils.h"
+// Get current time in microseconds
+double get_time() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec * 1e6 + tv.tv_usec;
+}
 
 char *handle_print(DbOperator *query);
+void handle_batched_queries(DbOperator *query, message *send_message);
+void handle_dbOperator(DbOperator *query, message *send_message);
+
+void handle_query(char *query, message *send_message, int client_socket,
+                  ClientContext *client_context) {
+  // 1. Parse command
+  //    Query string is converted into a request for an database operator
+  DbOperator *dbo = parse_command(query, send_message, client_socket, client_context);
+  // 2. Handle request, if appropriate
+  if (dbo) {
+    // If batching queries, add to batch
+    int should_batch_query =
+        is_batch_queries_on(client_context) && !(dbo->type == EXEC_BATCH);
+    if (should_batch_query && add_query_to_batch(dbo) == 0) {
+      cs165_log(stdout, "Added query to batch\n");
+      send_message->status = OK_DONE;
+    } else {
+      handle_dbOperator(dbo, send_message);
+      db_operator_free(dbo);
+    }
+  }
+}
 
 /**
  * @brief execute_DbOperator
@@ -21,9 +47,11 @@ void handle_dbOperator(DbOperator *query, message *send_message) {
     case CREATE:
       exec_create(query, send_message);
       break;
-    case SELECT:
+    case SELECT: {
+      double t0 = get_time();
       exec_select(query, send_message);
-      break;
+      log_perf("exec_select: t = %.6fμs\n\n", get_time() - t0);
+    } break;
     case FETCH:
       exec_fetch(query, send_message);
       break;
@@ -50,11 +78,36 @@ void handle_dbOperator(DbOperator *query, message *send_message) {
     case INSERT:
       exec_insert(query, send_message);
       break;
+    case EXEC_BATCH:
+      // Currently supports only batch select queries, per milestone 2 requirements
+      handle_batched_queries(query, send_message);
+      set_batch_queries(query->context, 0);
+      break;
     default:
       cs165_log(stdout, "execute_DbOperator: Unknown query type\n");
       break;
   }
-  db_operator_free(query);
+}
+
+/**
+ * @brief handle_batched_queries
+ * Executes a batch of select queries in parallel
+ *
+ * @param query DbOperator containing the batched queries
+ * @param send_message message to send back to the client
+ */
+void handle_batched_queries(DbOperator *query, message *send_message) {
+  if (!query->context || !query->context->bselect_dbos) {
+    log_err("handle_batched_queries: Invalid query\n");
+    handle_error(send_message, "Invalid batched query");
+  } else {
+    handle_error(send_message,
+                 "handle_batched_queries: invalid batched query execution request\nOnly "
+                 "batched select queries are supported");
+  }
+  double t0 = get_time();
+  exec_batch_select(query, send_message);
+  log_perf("\nexec_batch_select: t = %.6fμs\n\n", get_time() - t0);
 }
 
 /**
@@ -89,6 +142,7 @@ char *handle_print(DbOperator *query) {
 
   //   cs165_log(stdout, "handle_print: scanning columns\n");
   // Print each row
+  cs165_log(stdout, "handle_print: num_rows: %zu\n", num_rows);
   for (size_t row = 0; row < num_rows; row++) {
     // Print each column's value in the current row
     for (size_t col = 0; col < print_op->num_columns; col++) {
@@ -136,4 +190,59 @@ char *handle_print(DbOperator *query) {
   *current = '\0';
   cs165_log(stdout, "handle_print: done\n");
   return result;
+}
+
+void set_batch_queries(ClientContext *client_context, int is_on) {
+  if (!client_context) {
+    log_err("set_batch_select: client context is not initialized\n");
+    return;
+  }
+  client_context->is_batch_queries_on = is_on;
+  log_info("set_batch_select: batch select is %s\n", is_on ? "ON" : "OFF");
+}
+
+int is_batch_queries_on(ClientContext *client_context) {
+  if (!client_context) {
+    log_err("is_batch_queries_on: client context is not initialized\n");
+    return -1;
+  }
+  return client_context->is_batch_queries_on;
+}
+
+void db_operator_free_wrapper(void *ptr) { db_operator_free((DbOperator *)ptr); }
+
+int add_query_to_batch(DbOperator *query) {
+  log_info("add_query_to_batch: adding a query to batch\n");
+  if (query->type != SELECT) {  // The caller (server.c) ensures query is Non-null
+    log_err("add_query_to_batch: Support for non-SELECT queries not implemented yet\n");
+    return -1;
+  }
+
+  ClientContext *context = query->context;
+
+  if (!context->bselect_dbos) {
+    context->bselect_dbos = vector_create(db_operator_free_wrapper);
+    if (!context->bselect_dbos) {
+      log_err("add_query_to_batch: failed to create batch queries vector\n");
+      return -1;
+    }
+    //   } else {
+    //     // Ensure the previous query's column is the same as current query's column
+    //     // This is guaranteed from project requirements, so we can skip this check,
+    //     until we
+    //     // are extending for extra credit.
+    //     DbOperator *prev_query = (DbOperator *)vector_get(
+    //         context->bselect_dbos, vector_size(context->bselect_dbos) - 1);
+    //     if (prev_query->operator_fields.select_operator.comparator->col !=
+    //         query->operator_fields.select_operator.comparator->col) {
+    //       log_err(
+    //           "add_query_to_batch: previous select query's column is different from
+    //           current " "query's column\n");
+    //       return;
+    //     }
+  }
+
+  vector_push_back(context->bselect_dbos, query);
+  log_info("add_query_to_batch: added query to batch\n");
+  return 0;
 }

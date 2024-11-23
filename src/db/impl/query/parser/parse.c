@@ -19,6 +19,7 @@
 
 #include "catalog_manager.h"
 #include "client_context.h"
+#include "handler.h"
 #include "utils.h"
 
 // Function prototypes
@@ -112,6 +113,19 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
   } else if (strncmp(query_command, "print", 5) == 0) {
     query_command += 5;
     dbo = parse_print(query_command);
+  } else if (strncmp(query_command, "batch_queries", 13) == 0) {
+    set_batch_queries(context, 1);
+    send_message->status = OK_DONE;
+  } else if (strncmp(query_command, "batch_execute", 13) == 0) {
+    // Create dbo of type batch_execute
+    dbo = malloc(sizeof(DbOperator));
+    dbo->type = context->is_batch_queries_on ? EXEC_BATCH : UNKNOWN_COMMAND;
+    send_message->status = OK_DONE;
+  } else if (strncmp(query_command, "single_core()", 12) == 0) {
+    context->is_single_core = 1;
+  } else if (strncmp(query_command, "single_core_execute", 19) == 0) {
+    context->is_single_core = 0;
+    send_message->status = OK_DONE;
   } else {
     send_message->status = UNKNOWN_COMMAND;
   }
@@ -455,7 +469,6 @@ DbOperator *parse_select(char *query_command, char *handle) {
   }
 
   char *high_str = next_token(command_index, &status);
-  printf("high_str: %s\n", high_str);
   if (status == INCORRECT_FORMAT) {
     return NULL;
   }
@@ -478,7 +491,7 @@ DbOperator *parse_select(char *query_command, char *handle) {
   cs165_log(stdout, "parse_select: got column %s\n", col->name);
   dbo->operator_fields.select_operator.comparator->col = col;
   dbo->operator_fields.select_operator.comparator->ref_posns = NULL;
-  dbo->operator_fields.select_operator.res_handle = handle;
+  dbo->operator_fields.select_operator.res_handle = strdup(handle);
 
   // If posn_vec is not NULL, then we have a type 2 select query
   if (posn_vec) {

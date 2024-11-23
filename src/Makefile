@@ -132,3 +132,5 @@ distclean: clean
 	rm -rf $(DEPSDIR)
 	rm -r disk
 	rm -f *.bin
+
+.PHONY: all clean distclean

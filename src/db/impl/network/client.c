@@ -131,7 +131,7 @@ int main(void) {
         char payload[num_bytes + 1];
 
         // Receive the payload and print it out
-        if ((len = recv(client_socket, payload, num_bytes, 0)) > 0) {
+        if ((len = recv_message_safe(client_socket, payload, num_bytes)) > 0) {
           payload[num_bytes] = '\0';
           // TODO: refactor to only have server send payload only
           // if it was a `print` command otherwise, send just the status. (time

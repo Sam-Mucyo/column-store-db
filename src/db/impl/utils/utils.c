@@ -16,9 +16,10 @@
 #define ANSI_COLOR_GREEN "\x1b[32m"
 #define ANSI_COLOR_RESET "\x1b[0m"
 
-#define LOG 1
+// #define LOG 1
 #define LOG_ERR 1
-#define LOG_INFO 1
+// #define LOG_INFO 1
+#define LOG_PERF 1
 
 /* removes newline characters from the input string.
  * Shifts characters over and shortens the length of
@@ -103,6 +104,17 @@ void cs165_log(FILE *out, const char *format, ...) {
 #endif
 }
 
+void log_perf(const char *format, ...) {
+#ifdef LOG_PERF
+  va_list v;
+  va_start(v, format);
+  vfprintf(stdout, format, v);
+  va_end(v);
+#else
+  (void)format;
+#endif
+}
+
 void log_err(const char *format, ...) {
 #ifdef LOG_ERR
   va_list v;
@@ -174,17 +186,65 @@ int *extend_and_update_mmap(int *mapped_addr, size_t *current_size, size_t offse
     size_t new_size = (required_size + page_size - 1) & ~(page_size - 1);
 
     // Remap with new size
+#ifdef __linux__
     void *new_addr = mremap(mapped_addr, *current_size, new_size, MREMAP_MAYMOVE);
     if (new_addr == MAP_FAILED) {
       return NULL;
     }
-
-    mapped_addr = new_addr;
-    *current_size = new_size;
+#elif __APPLE__
+    // macOS does not manually mmap a new region, so we need to create a new mapping
+    // and copy the old values over.
+    log_err(
+        "extend_and_update_mmap: macOS does not support mremap; support not implemented "
+        "yet\n");
+    return NULL;
+#endif
   }
 
   // Copy new values to the specified offset
   memcpy(mapped_addr + offset, new_values, count * sizeof(int));
 
   return mapped_addr;
+}
+
+// message send function, with error handling
+ssize_t send_message_safe(int socket, const void *buffer, size_t length) {
+  size_t total_sent = 0;
+  const char *buf = (const char *)buffer;
+
+  while (total_sent < length) {
+    size_t remaining = length - total_sent;
+    size_t chunk_size = remaining;
+
+    ssize_t sent = send(socket, buf + total_sent, chunk_size, 0);
+    if (sent < 0) {
+      if (errno == EINTR) continue;  // Interrupted, try again
+      return -1;                     // Error
+    }
+    total_sent += sent;
+  }
+  return total_sent;
+}
+
+// Improved message receive function
+ssize_t recv_message_safe(int socket, void *buffer, size_t length) {
+  size_t total_received = 0;
+  char *buf = (char *)buffer;
+
+  while (total_received < length) {
+    size_t remaining = length - total_received;
+    size_t chunk_size = remaining;
+
+    ssize_t received = recv(socket, buf + total_received, chunk_size, 0);
+    if (received < 0) {
+      if (errno == EINTR) continue;  // Interrupted, try again
+      return -1;                     // Error
+    }
+    if (received == 0) {
+      log_err("recv_message_safe: connection closed\n");
+      return total_received;  // Connection closed
+    }
+    total_received += received;
+  }
+  return total_received;
 }

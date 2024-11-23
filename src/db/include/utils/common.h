@@ -12,6 +12,7 @@
 #define MAX_SIZE_NAME 64
 #define HANDLE_MAX_SIZE 64
 #define MAX_PATH_LEN 512
+#define NUM_ELEMENTS_TO_MULTITHREAD 10000
 #define STORAGE_PATH "disk"
 
 // CSV Transfer Constants

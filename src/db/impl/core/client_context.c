@@ -6,11 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "utils.h"
-
 #define INITIAL_CHANDLE_SLOTS 1000
 #define GROWTH_FACTOR 2
-#define MIN_SLOTS 4
 
 // TODO: Extra: to support multiple clients, consider not using a global client
 // context. Using global now for simplicity.
@@ -42,6 +39,8 @@ void init_client_context(void) {
 
   g_client_context->chandles_in_use = 0;
   g_client_context->chandle_slots = INITIAL_CHANDLE_SLOTS;
+  g_client_context->is_batch_queries_on = 0;
+  g_client_context->is_single_core = 0;
   log_info("Client context initialized\n");
   return;
 }
@@ -79,8 +78,9 @@ int create_new_handle(const char *name, Column **out_column) {
   }
 
   // Check for duplicate names.
-  //    TODO: removing this until we have an O(1) lookup. Currently, we don't expect many
-  //    handles to be created: > 100, >1000?
+  //    TODO: removing this until we have an O(1) lookup. Currently, we don't expect
+  //    many handles to be created: > 100, >1000?
+  //   Also, what number of handles would be worth the overhead of a hash table?m
   //   if (get_handle(name) != NULL) {
   //     log_err("create_new_handle: handle with name %s already exists\n", name);
   //     return -1;

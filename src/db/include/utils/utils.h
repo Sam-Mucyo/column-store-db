@@ -10,6 +10,8 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 
 #include "common.h"
 
@@ -51,6 +53,8 @@ void cs165_log(FILE *out, const char *format, ...);
 // Usage: log_err("%s: error at line: %d", __func__, __LINE__);
 void log_err(const char *format, ...);
 
+void log_perf(const char *format, ...);
+
 // log_info(format, ...)
 // Writes the string from @format to stdout, extendable for
 // additional parameters. Like cs165_log, but specifically to stdout.
@@ -64,5 +68,8 @@ void handle_error(message *send_message, char *error_message);
 
 int *extend_and_update_mmap(int *mapped_addr, size_t *current_size, size_t offset,
                             const int *new_values, size_t count);
+
+ssize_t send_message_safe(int socket, const void *buffer, size_t length);
+ssize_t recv_message_safe(int socket, void *buffer, size_t length);
 
 #endif /* __UTILS_H__ */
