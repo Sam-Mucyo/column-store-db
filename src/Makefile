@@ -4,7 +4,7 @@
 # to your project
 
 # Main targets
-all: client server
+all: client server testlib
 
 # C-compiler settings
 CC = gcc -std=c99 -g -ggdb3
@@ -17,6 +17,7 @@ DB_DIR = db
 LIB_DIR = lib
 DB_IMPL_DIR = $(DB_DIR)/impl
 LIB_IMPL_DIR = $(LIB_DIR)/impl
+LIB_TST_DIR = $(LIB_DIR)/tests
 
 # Include directories - add all subdirectories
 DB_INCLUDES = $(DB_DIR)/include \
@@ -93,9 +94,10 @@ UTILS_OBJS = $(UTILS_SRCS:.c=.o)
 
 # Library components
 LIB_SRCS = $(wildcard $(LIB_IMPL_DIR)/*.c)
-
-#TODO: To be uncommented when we have datastructures implemented
 LIB_OBJS =  $(LIB_SRCS:.c=.o)
+
+LIB_TSTS_SRCS = $(wildcard $(LIB_TST_DIR)/*.c)
+LIB_TSTS_OBJS = $(LIB_TSTS_SRCS:.c=.o)
 
 ####### Build Rules #######
 # Create .deps subdirectories to match source tree
@@ -105,7 +107,8 @@ $(shell mkdir -p $(DEPSDIR)/$(DB_IMPL_DIR)/core \
                  $(DEPSDIR)/$(DB_IMPL_DIR)/query/parser \
                  $(DEPSDIR)/$(DB_IMPL_DIR)/query/executor \
                  $(DEPSDIR)/$(DB_IMPL_DIR)/utils \
-                 $(DEPSDIR)/$(LIB_IMPL_DIR))
+                 $(DEPSDIR)/$(LIB_IMPL_DIR) \
+				 $(DEPSDIR)/$(LIB_TST_DIR))
 
 %.o : %.c $(BUILDSTAMP)
 	@mkdir -p $(dir $(DEPSDIR)/$*)
@@ -123,8 +126,11 @@ client: $(NETWORK_DIR)/client.o $(UTILS_OBJS) $(LIB_OBJS)
 server: $(NETWORK_DIR)/server.o $(CORE_OBJS) $(QUERY_OBJS) $(UTILS_OBJS) $(LIB_OBJS)
 	$(CC) $(CFLAGS) $(DEPCFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
 
+testlib: $(LIB_TSTS_OBJS) $(UTILS_OBJS) $(LIB_OBJS)
+	$(CC) $(CFLAGS) $(DEPCFLAGS) -o $@ $^ $(LDFLAGS) $(LIBS)
+
 clean:
-	rm -f client server $(CORE_OBJS) $(NETWORK_OBJS) $(QUERY_OBJS) $(UTILS_OBJS) $(LIB_OBJS)
+	rm -f client server $(CORE_OBJS) $(NETWORK_OBJS) $(QUERY_OBJS) $(UTILS_OBJS) $(LIB_OBJS) $(LIB_TSTS_OBJS)
 	rm -f *~ *.bak core *.core $(SOCK_PATH)
 	rm -rf .deps
 
