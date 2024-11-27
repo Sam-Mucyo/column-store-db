@@ -46,11 +46,12 @@ SOFTWARE.
 #include "client_context.h"
 #include "common.h"
 #include "handler.h"
+#include "optimizer.h"
 #include "utils.h"
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024
 
-int receive_columns(int client_socket);
+int receive_columns(int client_socket, message *send_message);
 
 /**
  * handle_client(client_socket)
@@ -86,7 +87,8 @@ void handle_client(int client_socket, int *shutdown) {
       break;
     }
 
-    if (recv_message.status == CSV_TRANSFER) receive_columns(client_socket);
+    if (recv_message.status == CSV_TRANSFER)
+      receive_columns(client_socket, &send_message);
 
     if (recv_message.status == INCOMING_QUERY) {
       char recv_buffer[recv_message.length + 1];
@@ -195,10 +197,13 @@ int main(void) {
   return 0;
 }
 
-int receive_columns(int socket) {
+int receive_columns(int socket, message *send_message) {
   log_info("Server: Receiving column data from client at socket %d\n", socket);
   ColumnMetadata metadata = {0};
   ssize_t bytes_received = 0;
+  Table *table = NULL;
+  Column *primary_col = NULL;  // Primary column for indexing, this is the first column
+                               // with clustered index
 
   while ((bytes_received = recv(socket, &metadata, sizeof(ColumnMetadata), 0)) > 0) {
     if (bytes_received != sizeof(ColumnMetadata)) {
@@ -215,8 +220,16 @@ int receive_columns(int socket) {
 
     cs165_log(stdout, "Received metadata for column %s\n", metadata.name);
     Column *col = get_column_from_catalog(metadata.name);
-    if (!col) {
-      log_err("Failed to create or get column: %s\n", metadata.name);
+
+    // extract table name from column name. e.g. metadata.name=db1.tbl1.col1 -> tbl1
+    char table_name[strlen(metadata.name) + 1];
+    strcpy(table_name, metadata.name);
+    char *table_name_ptr = strtok(table_name, ".");  // first call gets "db1"
+    table_name_ptr = strtok(NULL, ".");              // second call gets "tbl1"
+
+    if (!table && table_name_ptr) table = get_table_from_catalog(table_name_ptr);
+    if (!col || !table) {
+      log_err("Failed to find table and column for metadata %s\n", metadata.name);
       return -1;
     }
     col->num_elements = metadata.num_elements;
@@ -282,6 +295,14 @@ int receive_columns(int socket) {
               metadata.name, file_size, total_received);
       return -1;
     }
+
+    if (col->index && col->index->idx_type != NONE) {
+      create_idx_on(col, send_message);
+      if (!primary_col && (col->index->idx_type == SORTED_CLUSTERED ||
+                           col->index->idx_type == BTREE_CLUSTERED)) {
+        primary_col = col;
+      }
+    }
     col->is_dirty = 0;
     // NOTE: Differing this for `shutdown`
     // // Ensure data is written to disk
@@ -293,6 +314,9 @@ int receive_columns(int socket) {
 
     printf("Successfully received and stored data for column %s\n", metadata.name);
   }
+
+  // Cluster index of the primary column
+  if (primary_col && table) cluster_idx_on(table, primary_col, send_message);
 
   return 0;
 }

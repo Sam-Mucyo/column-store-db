@@ -10,7 +10,6 @@
 Status create_db(const char *db_name);
 Table *create_table(Db *db, const char *name, size_t num_columns, Status *status);
 Column *create_column(Table *table, const char *name, bool sorted, Status *status);
-void exec_create_index(Column *col, IndexType index_type, message *send_message);
 
 /**
  * @brief Executes a create query. This can be a
@@ -25,11 +24,17 @@ void exec_create(DbOperator *query, message *send_message) {
   //   Just for consistency and cleaner code.
 
   if (query->type == CREATE_INDEX) {
-    cs165_log(stdout, "exec_create: Creating index on column %s\n",
-              query->operator_fields.create_index_operator.col->name);
-    exec_create_index(query->operator_fields.create_index_operator.col,
-                      query->operator_fields.create_index_operator.idx_type,
-                      send_message);
+    Column *col = query->operator_fields.create_index_operator.col;
+    IndexType idx_type = query->operator_fields.create_index_operator.idx_type;
+
+    cs165_log(stdout, "exec_create: Creating index on column %s\n", col->name);
+    col->index = malloc(sizeof(ColumnIndex));
+    col->index->idx_type = idx_type;
+
+    // Set these to NULL since all create_idx queries are before data is loaded
+    // The actual index is made on during `load`
+    col->index->sorted_data = NULL;
+    col->index->positions = NULL;
     return;
   }
 
@@ -69,17 +74,6 @@ void exec_create(DbOperator *query, message *send_message) {
   send_message->status = OK_DONE;
   send_message->length = strlen(res_msg);
   send_message->payload = res_msg;
-}
-
-void exec_create_index(Column *col, IndexType index_type, message *send_message) {
-  (void)col;
-  (void)index_type;
-  (void)send_message;
-  log_err(
-      "exec_create_index: Index creation not implemented yet; Received column %s, index "
-      "type "
-      "%d\n",
-      col->name, index_type);
 }
 
 int create_directory(const char *path) {
@@ -225,6 +219,8 @@ Column *create_column(Table *table, const char *name, bool sorted, Status *ret_s
   new_column->min_value = 0;
   new_column->max_value = 0;
   new_column->mmap_size = 0;
+  new_column->disk_fd = -1;
+  new_column->index = NULL;
 
   table->num_cols++;
   log_info("Column %s created successfully\n", name);
