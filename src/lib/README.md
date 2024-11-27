@@ -4,4 +4,4 @@
 
 #### 1. BTrees
 
-![Btree Test Case/Example](https://drive.google.com/uc?id=1XEnkWs9rdh5b_GmJIYtb3dt7UOFA4bOV)
+![Btree Test Case/Example](./docs/btree-ex.png)
