@@ -142,6 +142,15 @@ void log_info(const char *format, ...) {
 #endif
 }
 
+/**
+ * @brief handles error by updating the message to be sent back to the client as
+ * appropriate. Sets the message status to EXECUTION_ERROR and the payload to the
+ * error message. This won't log on the server-side, since the error_message might be
+ * different for debugging purposes.
+ *
+ * @param send_message
+ * @param error_message
+ */
 void handle_error(message *send_message, char *error_message) {
   send_message->status = EXECUTION_ERROR;
   send_message->payload = error_message;
