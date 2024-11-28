@@ -9,7 +9,84 @@
 #include <unistd.h>
 
 #include "common.h"
+#include "optimizer.h"
 #include "utils.h"
+
+bool is_valid_index_type(int value) {
+  switch (value) {
+    case BTREE_CLUSTERED:
+    case BTREE_UNCLUSTERED:
+    case SORTED_CLUSTERED:
+    case SORTED_UNCLUSTERED:
+    case NONE:
+      return true;
+    default:
+      return false;
+  }
+}
+
+Status deserialize_column(Column *col, Table *table, FILE *meta_file) {
+  col->data_type = INT;  // Default to INT for the scope of this project
+  size_t num_elements;
+  long min_value, max_value, sum;
+  int idx_type;
+
+  // Load column metadata
+  if (fscanf(meta_file,
+             "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%ld\n"
+             "SUM=%ld\nINDEX_TYPE=%d\n",
+             col->name, &num_elements, &min_value, &max_value, &sum, &idx_type) != 6) {
+    log_err("init_db_from_disk: Failed to read column metadata for table %s\n",
+            table->name);
+    return (Status){ERROR, "Failed to read column metadata"};
+  }
+
+  // Set column metadata
+  col->num_elements = num_elements;
+  col->min_value = min_value;
+  col->max_value = max_value;
+  col->sum = sum;
+  col->is_dirty = 0;
+
+  // Construct the path to the column's data file
+  char col_path[MAX_PATH_LEN];
+  snprintf(col_path, MAX_PATH_LEN, "%s.%s.%s.bin", current_db->name, table->name,
+           col->name);
+
+  // Open the column data file
+  col->disk_fd = open(col_path, O_RDWR);
+  if (col->disk_fd < 0) {
+    log_err("Failed to open column data file %s\n", col_path);
+    return (Status){ERROR, "Failed to open column data file"};
+  }
+
+  // mmap the column data
+  col->mmap_size = col->num_elements * sizeof(int);
+  col->data = (int *)mmap(NULL, col->mmap_size, PROT_READ | PROT_WRITE, MAP_SHARED,
+                          col->disk_fd, 0);
+  if (col->data == MAP_FAILED) {
+    log_err("Error mmapping column data");
+    close(col->disk_fd);
+    return (Status){ERROR, "Failed to mmap column data"};
+  }
+
+  // Handle index creation, if necessary
+  if (!is_valid_index_type(idx_type)) {
+    log_err("init_db_from_disk: Invalid index type %d for column %s\n", idx_type,
+            col->name);
+    return (Status){ERROR, "Invalid index type"};
+  }
+  if (idx_type != NONE) {
+    col->index = (ColumnIndex *)malloc(sizeof(ColumnIndex));
+    col->index->idx_type = idx_type;
+    create_idx_on(col, NULL);
+  } else {
+    col->index = NULL;
+  }
+
+  log_info("Loaded in col %s with %d numbers.\n", col->name, col->num_elements);
+  return (Status){OK, NULL};
+}
 
 Status init_db_from_disk(void) {
   cs165_log(stdout, "Initializing database from disk\n");
@@ -126,55 +203,27 @@ Status init_db_from_disk(void) {
             return (Status){ERROR, "Failed to allocate memory for columns"};
           }
 
+          Column *primary_col = NULL;  // Primary column for indexing, this is the first
+                                       // column with clustered index
           // Read column metadata and remap each column's data file
           for (size_t j = 0; j < table->num_cols; j++) {
             Column *col = &table->columns[j];
-            size_t num_elements;
-            col->data_type = INT;  // Default to INT for the scope of this project
-            long min_value, max_value, sum;
-            if (fscanf(meta_file,
-                       "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%"
-                       "ld\nSUM=%ld\n",
-                       col->name, &num_elements, &min_value, &max_value, &sum) != 5) {
-              log_err("init_db_from_disk: Failed to read column metadata for table %s\n",
-                      table->name);
+            if (deserialize_column(col, table, meta_file).code != OK) {
               free(table->columns);
               free(current_db->tables);
               free(current_db);
               fclose(meta_file);
               closedir(dir);
-              return (Status){ERROR, "Failed to read column metadata"};
+              return (Status){ERROR, "Failed to load column metadata"};
             }
-
-            // Set column metadata
-            col->num_elements = num_elements;
-            col->min_value = min_value;
-            col->max_value = max_value;
-            col->sum = sum;
-            col->is_dirty = 0;
-
-            // Construct the path to the column's data file
-            char col_path[MAX_PATH_LEN];
-            snprintf(col_path, MAX_PATH_LEN, "%s.%s.%s.bin", current_db->name,
-                     table->name, col->name);
-
-            // Open the column data file
-            col->disk_fd = open(col_path, O_RDWR);
-            if (col->disk_fd < 0) {
-              log_err("Failed to open column data file %s\n", col_path);
-              continue;
+            IndexType idx_type = col->index ? col->index->idx_type : NONE;
+            if (!primary_col &&
+                (idx_type == SORTED_CLUSTERED || idx_type == BTREE_CLUSTERED)) {
+              primary_col = col;
             }
-
-            // mmap the column data
-            col->mmap_size = col->num_elements * sizeof(int);
-            col->data = (int *)mmap(NULL, col->mmap_size, PROT_READ | PROT_WRITE,
-                                    MAP_SHARED, col->disk_fd, 0);
-            if (col->data == MAP_FAILED) {
-              log_err("Error mmapping column data");
-              close(col->disk_fd);
-              continue;
-            }
-            log_info("Loaded in col %s with %d numbers.\n", col->name, col->num_elements);
+          }
+          if (primary_col) {
+            cluster_idx_on(table, primary_col, NULL);
           }
         }
 
@@ -279,9 +328,24 @@ Status shutdown_catalog_manager(void) {
     // Iterate over each column in the table
     for (size_t j = 0; j < table->num_cols; j++) {
       Column *col = &table->columns[j];
+      int idx_type = col->index ? col->index->idx_type : NONE;
+
       fprintf(meta_file,
-              "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%ld\nSUM=%ld\n",
-              col->name, col->num_elements, col->min_value, col->max_value, col->sum);
+              "COLUMN_NAME=%s\nNUM_ELEMENTS=%zu\nMIN_VALUE=%ld\nMAX_VALUE=%ld\nSUM=%ld\n"
+              "INDEX_TYPE=%d\n",
+              col->name, col->num_elements, col->min_value, col->max_value, col->sum,
+              idx_type);
+
+      if (idx_type != NONE) {
+        if (col->index->idx_type == BTREE_CLUSTERED ||
+            col->index->idx_type == BTREE_UNCLUSTERED) {
+          // Write the btree index to disk
+          free_btree(col->root);
+        }
+        free(col->index->sorted_data);
+        free(col->index->positions);
+        free(col->index);
+      }
 
       if (col->is_dirty) {
         // Only truncate and sync the actual data size
