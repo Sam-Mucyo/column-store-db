@@ -8,6 +8,7 @@
 #include "client_context.h"
 #include "handler.h"
 #include "operators.h"
+#include "optimizer.h"
 #include "parse.h"
 #include "query_exec.h"
 #include "utils.h"
@@ -53,6 +54,8 @@ void exec_select(DbOperator *query, message *send_message) {
   SelectOperator *select_op = &query->operator_fields.select_operator;
   Comparator *comparator = select_op->comparator;
   Column *column = comparator->col;
+  size_t n_elts = column->num_elements;
+  int *data = (int *)column->data;
 
   // Create a new Column to store the result indices
   Column *result;
@@ -68,7 +71,7 @@ void exec_select(DbOperator *query, message *send_message) {
   // Allocate memory for the result data
   //   For simplicity, we will allocate the maximum possible size (for now).
   //   TODO: replace this with a dynamic array after implementing such a data structure.
-  result->data = malloc(sizeof(int) * column->num_elements);
+  result->data = malloc(sizeof(int) * n_elts);
   if (!result->data) {
     log_err("exec_select: Failed to allocate memory for result data\n");
     send_message->status = EXECUTION_ERROR;
@@ -77,25 +80,52 @@ void exec_select(DbOperator *query, message *send_message) {
     return;
   }
 
+  // ref_posns is used to store the original positions of the data, this is used in
+  // in the second type of `select()` query that receives results from fetch.
+  //   Since indexes are on catalog columns, this `ref_posns` must always be NULL.
+  int using_temp_ref_posns = 0;
+  if (column->index && column->index->idx_type != NONE && !comparator->ref_posns) {
+    //   Milestone 3: Index-based selection
+    // Get offset: where to start scanning based on the low value
+    if (comparator->type1 == GREATER_THAN_OR_EQUAL &&
+        comparator->p_low >= column->min_value) {
+      // since low of query > min_value idx must be found
+      size_t start_idx = idx_lookup_left(column, comparator->p_low);
+      n_elts = column->num_elements - start_idx;
+      data = column->index->sorted_data + start_idx;
+      using_temp_ref_posns = 1;
+      comparator->ref_posns = column->index->positions + start_idx;
+      comparator->on_sorted_data = 1;
+
+      log_info(
+          "exec_select: used index to get starting position: %ld\nwhere "
+          "sorted_data[%ld] = %d\n",
+          start_idx, start_idx, column->index->sorted_data[start_idx]);
+    }
+  }
+
   cs165_log(stdout, "exec_select: Starting to scan\n");
 
-  if (column->num_elements < NUM_ELEMENTS_TO_MULTITHREAD) {
-    //   Milestone 1 : Single - core selection: to avoid the overhead of creating threads
-    result->num_elements = select_values_singlecore(column->data, column->num_elements,
-                                                    comparator, result->data);
+  if (n_elts < NUM_ELEMENTS_TO_MULTITHREAD) {
+    //   Milestone 1 : Single - core selection: to avoid the overhead of creating
+    //   threads
+    result->num_elements =
+        select_values_singlecore(data, n_elts, comparator, result->data);
     log_perf("\nqualifying range: [%ld, %ld]\n", comparator->p_low, comparator->p_high);
-    log_perf("selectivity: %d/%zu = %.2f%%\n", result->num_elements, column->num_elements,
-             (double)result->num_elements / column->num_elements * 100);
+    log_perf("selectivity: %d/%zu = %.2f%%\n", result->num_elements, n_elts,
+             (double)result->num_elements / n_elts * 100);
   } else {
     //   Milestone 2: Multi-core selection
     Comparator **comparators = malloc(sizeof(Comparator *));
     comparators[0] = comparator;
     Column **result_columns = malloc(sizeof(Column *));
     result_columns[0] = result;
-    batch_select_multi_core((int *)column->data, column->num_elements, comparators,
-                            result_columns, 1);
+    batch_select_multi_core(data, n_elts, comparators, result_columns, 1);
   }
   log_info("exec_select: Selection operation completed successfully.\n");
+
+  //   Reset the temporary reference positions
+  if (using_temp_ref_posns) comparator->ref_posns = NULL;
 
   //   set send_message
   send_message->status = OK_DONE;

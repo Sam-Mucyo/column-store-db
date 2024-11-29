@@ -556,6 +556,9 @@ DbOperator *parse_select(char *query_command, char *handle) {
   cs165_log(stdout, "parse_select: got column %s\n", col->name);
   dbo->operator_fields.select_operator.comparator->col = col;
   dbo->operator_fields.select_operator.comparator->ref_posns = NULL;
+
+  // We let the query handler decide on this before execution
+  dbo->operator_fields.select_operator.comparator->on_sorted_data = 0;
   dbo->operator_fields.select_operator.res_handle = strdup(handle);
 
   // If posn_vec is not NULL, then we have a type 2 select query

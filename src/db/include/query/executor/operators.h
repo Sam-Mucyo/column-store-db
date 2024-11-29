@@ -51,6 +51,7 @@ typedef struct Comparator {
   long int p_high;  // used in range compares.
   ComparatorType type1;
   ComparatorType type2;
+  int on_sorted_data;
 } Comparator;
 
 typedef struct SelectOperator {

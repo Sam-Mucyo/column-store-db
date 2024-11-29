@@ -42,6 +42,7 @@ SOFTWARE.
 #include <sys/un.h>
 #include <unistd.h>
 
+#include "algorithms.h"
 #include "catalog_manager.h"
 #include "client_context.h"
 #include "common.h"
@@ -202,8 +203,10 @@ int receive_columns(int socket, message *send_message) {
   ColumnMetadata metadata = {0};
   ssize_t bytes_received = 0;
   Table *table = NULL;
-  Column *primary_col = NULL;  // Primary column for indexing, this is the first column
-                               // with clustered index
+  Column *primary_col = NULL;    // Primary column for indexing, this is the first column
+                                 // with clustered index
+  Column *secondary_col = NULL;  // Secondary column for indexing, this is unclustered
+                                 // column
 
   while ((bytes_received = recv(socket, &metadata, sizeof(ColumnMetadata), 0)) > 0) {
     if (bytes_received != sizeof(ColumnMetadata)) {
@@ -296,11 +299,14 @@ int receive_columns(int socket, message *send_message) {
       return -1;
     }
 
-    if (col->index && col->index->idx_type != NONE) {
-      create_idx_on(col, send_message);
-      if (!primary_col && (col->index->idx_type == SORTED_CLUSTERED ||
-                           col->index->idx_type == BTREE_CLUSTERED)) {
+    IndexType idx_type = col->index ? col->index->idx_type : NONE;
+    if (idx_type != NONE) {
+      if (!primary_col && (idx_type == SORTED_CLUSTERED || idx_type == BTREE_CLUSTERED)) {
         primary_col = col;
+      }
+      if (!secondary_col &&
+          (idx_type == SORTED_UNCLUSTERED || idx_type == BTREE_UNCLUSTERED)) {
+        secondary_col = col;
       }
     }
     col->is_dirty = 0;
@@ -315,8 +321,11 @@ int receive_columns(int socket, message *send_message) {
     printf("Successfully received and stored data for column %s\n", metadata.name);
   }
 
-  // Cluster index of the primary column
-  if (primary_col && table) cluster_idx_on(table, primary_col, send_message);
+  if (!primary_col) return 0;
+  create_idx_on(primary_col, send_message);
+  //   cluster_idx_on(table, primary_col, send_message);
+
+  if (secondary_col) create_idx_on(secondary_col, send_message);
 
   return 0;
 }
