@@ -97,10 +97,10 @@ void exec_select(DbOperator *query, message *send_message) {
       comparator->ref_posns = column->index->positions + start_idx;
       comparator->on_sorted_data = 1;
 
-      log_info(
-          "exec_select: used index to get starting position: %ld\nwhere "
-          "sorted_data[%ld] = %d\n",
-          start_idx, start_idx, column->index->sorted_data[start_idx]);
+      //   log_info(
+      //       "exec_select: used index to get starting position: %ld\nwhere "
+      //       "sorted_data[%ld] = %d\n",
+      //       start_idx, start_idx, column->index->sorted_data[start_idx]);
     }
   }
 
@@ -265,9 +265,11 @@ size_t select_values_singlecore(const int *data, size_t num_elements,
     return -1;
   }
   int *ref_posns = comparator->ref_posns;
+  int can_terminate = comparator->on_sorted_data && comparator->p_high;
 
   size_t result_count = 0;
   for (size_t i = 0; i < num_elements; i += 1) {
+    if (can_terminate && comparator->p_high < data[i]) break;
     if (should_include(data[i], comparator)) {
       result_indices[result_count++] = ref_posns ? (size_t)ref_posns[i] : i;
     }
