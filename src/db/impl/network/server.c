@@ -64,8 +64,6 @@ int receive_columns(int client_socket, message *send_message);
  **/
 void handle_client(int client_socket, int *shutdown) {
   int length = 0;
-  double client_t0 = get_time();
-
   log_info("Connected to socket: %d.\n", client_socket);
   session_id++;
 

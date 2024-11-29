@@ -52,6 +52,7 @@ void create_idx_on(Column *col, message *send_message) {
 }
 
 void cluster_idx_on(Table *table, Column *primary_col, message *send_message) {
+  (void)send_message;
   log_err(
       "cluster_idx: clustering index not implemented yet; Got table: %s, primary column: "
       "%s\n",
