@@ -101,10 +101,9 @@ void handle_client(int client_socket, int *shutdown) {
       length = recv(client_socket, recv_buffer, recv_message.length, 0);
       recv_message.payload = recv_buffer;
       recv_message.payload[recv_message.length] = '\0';
-      cs165_log(stdout, "Received message: %s\n", recv_message.payload);
-      log_client_perf(stdout, "Query: %s", recv_message.payload);
 
-      double query_t0 = get_time();
+      cs165_log(stdout, "Received message: %s\n", recv_message.payload);
+
       handle_query(recv_message.payload, &send_message, client_socket, client_context);
     }
 
@@ -119,9 +118,6 @@ void handle_client(int client_socket, int *shutdown) {
       log_err("Failed to send message.");
     }
   }
-
-  log_client_perf(stdout, "Client %d, Session %d: Total time: %.6fμs\n", client_id,
-                  session_id, get_time() - client_t0);
   log_info("Connection closed at socket %d!\n", client_socket);
   close(client_socket);
 }

@@ -116,8 +116,8 @@ size_t idx_lookup_left(Column *col, int value) {
 
   //   Worst case that the sorted_data[match_idx] = value = sorted_data[match_idx]
   //    we want idx s.t. col->data[i - 1] < value
-  log_err("Optimizer: should linear search after index lookup? %s\n",
-          match_idx > 0 && sorted_data[match_idx] == value ? "Yes" : "No");
+  //   printf("Optimizer: should linear search after index lookup? %s\n",
+  //          match_idx > 0 && sorted_data[match_idx] == value ? "Yes" : "No");
 
   while (match_idx > 0 && sorted_data[match_idx] == value) {
     match_idx--;

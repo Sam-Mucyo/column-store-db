@@ -43,7 +43,7 @@ void handle_dbOperator(DbOperator *query, message *send_message) {
     case SELECT: {
       double t0 = get_time();
       exec_select(query, send_message);
-      log_client_perf(stdout, "\texec_select: t = %.6fμs\n", get_time() - t0);
+      log_client_perf(stdout, " t_exec = %.6fμs\n", get_time() - t0);
     } break;
     case FETCH:
       exec_fetch(query, send_message);

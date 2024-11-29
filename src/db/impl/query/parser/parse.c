@@ -490,7 +490,7 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
 DbOperator *parse_select(char *query_command, char *handle) {
   message_status status = OK_DONE;
   char **command_index = &query_command;
-
+  log_client_perf(stdout, "select%s: ", query_command);
   // trim parenthesis using `trim_parenthesis` function
   trim_parenthesis(query_command);
   trim_whitespace(query_command);
