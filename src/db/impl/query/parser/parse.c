@@ -52,12 +52,6 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
   DbOperator *dbo = NULL;  // = malloc(sizeof(DbOperator));
   send_message->status = OK_WAIT_FOR_RESPONSE;
 
-  if (strncmp(query_command, "--", 2) == 0) {
-    send_message->status = OK_DONE;
-    // The -- signifies a comment line, no operator needed.
-    return NULL;
-  }
-
   char *equals_pointer = strchr(query_command, '=');
   char *handle = query_command;
   if (equals_pointer != NULL) {
