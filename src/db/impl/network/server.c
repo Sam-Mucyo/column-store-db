@@ -52,6 +52,8 @@ SOFTWARE.
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024
 
+int client_id = 0;
+
 int receive_columns(int client_socket, message *send_message);
 
 /**
@@ -61,8 +63,10 @@ int receive_columns(int client_socket, message *send_message);
  **/
 void handle_client(int client_socket, int *shutdown) {
   int length = 0;
+  double t0 = get_time();
 
   log_info("Connected to socket: %d.\n", client_socket);
+  client_id++;
 
   // Create two messages, one from which to read and one from which to receive
   message send_message = {.status = OK_WAIT_FOR_RESPONSE, .length = 0, .payload = NULL};
@@ -113,6 +117,7 @@ void handle_client(int client_socket, int *shutdown) {
     }
   }
 
+  log_client_perf(stdout, "Client %d: Total time: %.6fμs\n", client_id, get_time() - t0);
   log_info("Connection closed at socket %d!\n", client_socket);
   close(client_socket);
 }

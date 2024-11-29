@@ -1,16 +1,8 @@
 #include "handler.h"
 
 #include <string.h>
-#include <sys/time.h>
-#include <time.h>
 
-// Get current time in microseconds
-double get_time() {
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return tv.tv_sec * 1e6 + tv.tv_usec;
-}
-
+#include "utils.h"
 char *handle_print(DbOperator *query);
 void handle_batched_queries(DbOperator *query, message *send_message);
 void handle_dbOperator(DbOperator *query, message *send_message);
