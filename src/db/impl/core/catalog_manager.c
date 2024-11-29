@@ -390,6 +390,7 @@ Status shutdown_catalog_manager(void) {
 }
 
 void print_column(Column *col) {
+#ifdef LOG
   if (col == NULL) {
     log_err("vizualize_column: column is NULL\n");
     return;
@@ -440,4 +441,7 @@ void print_column(Column *col) {
   cs165_log(stdout, "Sum: %ld\n", col->sum);
 
   printf("\n\n\n");
+#else
+  (void)col;
+#endif
 }
