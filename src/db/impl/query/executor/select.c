@@ -106,7 +106,7 @@ void exec_select(DbOperator *query, message *send_message) {
 
   cs165_log(stdout, "exec_select: Starting to scan\n");
 
-  if (n_elts < NUM_ELEMENTS_TO_MULTITHREAD) {
+  if (n_elts < NUM_ELEMENTS_TO_MULTITHREAD | query->context->is_single_core) {
     //   Milestone 1 : Single - core selection: to avoid the overhead of creating
     //   threads
     result->num_elements =
