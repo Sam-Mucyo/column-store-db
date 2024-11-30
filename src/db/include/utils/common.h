@@ -19,7 +19,7 @@
 #define CSV_BUFFER_SIZE 1024
 #define MAX_COLUMNS 100  // TODO: Make this dynamic in upcoming milestones
 #define CSV_CHUNK_SIZE 4096
-#define BTREE_FANOUT 2048
+#define BTREE_FANOUT 64
 
 typedef struct {
   char column_name[256];  // of the form "db.table.column"
