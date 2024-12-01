@@ -2,54 +2,100 @@
 
 #include <sys/types.h>
 
+#include "algorithms.h"
 #include "btree.h"
 #include "utils.h"
-
-Btree* create_level(int* data, size_t n_elts, size_t stride, size_t fanout) {
-  // n_keys = ceil(n_elts / stride)
-  size_t n_keys = stride > 0 ? (n_elts + stride - 1) / stride : 0;
+/**
+ * @brief Create a Btree level node
+ *
+ * @pre 🚨 The Caller must ensure that `data` array is sorted and has unique values!!
+ *
+ * @param data
+ * @param n_uniques
+ * @param stride
+ * @param fanout
+ * @param first_idxes
+ * @param last_idxes
+ * ️
+ * @return Btree*
+ */
+Btree* create_level(int* data, size_t n_uniques, size_t stride, size_t fanout,
+                    size_t* first_idxes, size_t* last_idxes) {
+  size_t n_keys = stride > 0 ? (n_uniques + stride - 1) / stride : 0;
   if (n_keys == 0) return NULL;
 
   Btree* node = malloc(sizeof(Btree));
   node->keys = malloc(sizeof(int) * n_keys);
   node->n_keys = n_keys;
-  node->fanout = fanout;
   node->child_ptr = NULL;
 
-  // Fill the keys by taking every stride-th element, except the last
+  // Global bookkeeping; see todo in btree.h
+  node->fanout = fanout;
+  node->first_unique_idxes = first_idxes;
+  node->last_unique_idxes = last_idxes;
+  node->n_uniques = n_uniques;
+
+  // Take every stride-th element
   size_t key_idx = 0;
-  for (size_t i = 0; i < n_elts; i += stride) {
-    node->keys[key_idx++] = data[i];
+  for (size_t i = 0; i < n_uniques && key_idx < n_keys; i += stride) {
+    node->keys[key_idx] = data[i];
+    key_idx++;
   }
+
   return node;
 }
 
 Btree* init_btree(int* data, size_t n_elts, size_t fanout) {
   if (!data || n_elts == 0 || fanout < 2) return NULL;
+  /*
+  Some book keeping first: keep elements in `data` unique and store their first
+  and last occurrences (indices) of unique vals in the `data` array
+  If we have sample input: data[] = {2, 2, 2, 5, 5, 1, 7, 7, 7, 8}; n_elts = 10;
+                                i = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+   We want:
+        - unique_sorted = {2, 5, 1, 7, 8}
+        -  first_left   = {0, 3, 5, 6, 9}
+        -  first_right  = {2, 4, 5, 8, 9}
+
+  */
+  size_t* first_left = malloc(sizeof(size_t) * n_elts);
+  size_t* first_right = malloc(sizeof(size_t) * n_elts);
+  int* unique_sorted = malloc(sizeof(int) * n_elts);
+
+  unique_sorted[0] = data[0];
+  first_left[0] = 0;
+  size_t n_uniques = 0;
+
+  for (size_t i = 1; i < n_elts; i++) {
+    if (data[i] != data[i - 1]) {
+      first_right[n_uniques] = i - 1;  // Close off the current unique element
+      n_uniques++;                     // Move to the next unique index
+      first_left[n_uniques] = i;       // Start new unique element
+      unique_sorted[n_uniques] = data[i];
+    }
+  }
+  first_right[n_uniques] = n_elts - 1;  // Close off the last unique element
+  // Set `n_uniques` to the actual number of unique elements
+  n_uniques++;
 
   // Calculate number of levels needed: this is (log_{fanout} n_elts) - 1
   //  a -1 because the last level with all values is the `data` array itself
   size_t stride = 1;
   size_t n_levels = 0;
-  while (stride * fanout < n_elts) {
+  while (stride * fanout < n_uniques) {
     stride *= fanout;
     n_levels++;
   }
-  log_info("init_btree: Got %zu elements and fanout=%zu, so n_levels = %zu\n", n_elts,
-           fanout, n_levels);
 
-  // Handle single level case: we need this so that caller only cares about getting the
-  //   right index when calling `lookup`
-  if (n_levels == 0) {
-    return create_level(data, n_elts, 1, fanout);
-  }
+  n_levels++;  // Add the last level
 
   Btree** levels = malloc(sizeof(Btree*) * (n_levels));
   size_t current_stride = stride;
 
   // Create each level, starting from the root
   for (size_t i = 0; i < n_levels; i++) {
-    levels[i] = create_level(data, n_elts, current_stride, fanout);
+    levels[i] = create_level(unique_sorted, n_uniques, current_stride, fanout, first_left,
+                             first_right);
     current_stride /= fanout;
   }
 
@@ -65,69 +111,104 @@ Btree* init_btree(int* data, size_t n_elts, size_t fanout) {
   return root;
 }
 
-ssize_t lookup(int key, Btree* tree) {
-  if (!tree) return -1;
-  //  Base cases based on our B-tree design
-  if (tree->n_keys > 0) {
-    if (key == tree->keys[0]) return 0;  // the min element is always the first
-    if (key < tree->keys[0]) return -1;
-  }
+size_t lookup(int key, Btree* tree, int is_left) {
+  if (!tree || tree->n_keys == 0) return 0;  // Empty tree -> would start at 0
 
   Btree* current = tree;
   size_t pos = 0;
 
   cs165_log(stdout, "lookup: looking up %d in Btree\n", key);
-  int level = 0;  // Just fo debugging purposes
-
-  //   Looking up from to to bottom
-  while (current && current->n_keys > 0) {
-    cs165_log(stdout, "lookup: at l=%d, Node(i=%zu, values=[%d, ...]\n", level, pos,
-              current->keys[pos]);
-
-    while (pos < current->n_keys && key > current->keys[pos]) {
-      cs165_log(stdout, "lookup: key=%d > curr_val=%d, moving to next\n", key,
-                current->keys[pos]);
-      pos++;
-    }
-    if (pos == current->n_keys) {
-      pos--;
+  // Navigate to leaf level
+  while (current && current->child_ptr) {
+    if (pos < current->n_keys &&
+        (is_left ? key > current->keys[pos] : key >= current->keys[pos])) {
+      pos = binary_search_left(current->keys + pos, current->n_keys - pos, key);
     }
 
-    // Find the index of where to start reading on the next level below
-    if (key < current->keys[pos]) {
-      pos = current->fanout * (pos - 1);
-    } else {
-      pos = current->fanout * pos;
-    }
-
-    // Update for the next iteration
     current = current->child_ptr;
-
-    level++;
-    cs165_log(stdout, "moving to l=%d, pos=%zu\n", level, pos);
+    pos = pos * current->fanout;
   }
-  return pos;
+
+  // At leaf level, find position
+  cs165_log(stdout, "lookup: at leaf level, looking for key=%d, pos=%zu\n", key, pos);
+  pos = 0;
+  while (pos < current->n_keys &&
+         (is_left ? key > current->keys[pos] : key >= current->keys[pos])) {
+    pos++;
+  }
+  cs165_log(stdout, "lookup: at leaf level, found key=%d, pos=%zu\n", key, pos);
+
+  // If we're looking for leftmost (is_left true):
+  // - If key exists: return first occurrence index
+  // - If key doesn't exist: return index of the first element >= key
+  if (is_left) {
+    if (pos < current->n_keys && current->keys[pos] == key) {
+      cs165_log(stdout, "Left lookup: found key=%d at pos=%zu\n", key, pos);
+      log_info("returning first_unique_idxes[%zu] = %d\n", pos,
+               current->first_unique_idxes[pos]);
+      return current->first_unique_idxes[pos];
+    }
+    cs165_log(stdout, "Right lookup: found  key=%d at pos=%zu\n", key, pos);
+    cs165_log(stdout, "returning first_unique_idxes[%zu] = %d\n", pos,
+              pos > 0 ? current->first_unique_idxes[pos - 1] : 0);
+    return pos < current->n_keys ? current->first_unique_idxes[pos] : tree->n_keys;
+  }
+
+  // If we're looking for rightmost (is_left false):
+  // - If key exists: return last occurrence index
+  // - If key doesn't exist: return index of last element less than key
+  else {
+    if (pos < current->n_keys && current->keys[pos] == key) {
+      return current->last_unique_idxes[pos];
+    }
+    return pos > 0 ? current->last_unique_idxes[pos - 1] : 0;
+  }
 }
 
-void print_tree(Btree* tree) {
+void print_tree_helper(Btree* tree) {
   if (!tree) return;
-  printf("Node:  [");
+  log_info("Node:  [");
   for (size_t i = 0; i < tree->n_keys; i++) {
-    printf(" %d ", tree->keys[i]);
+    log_info(" %d ", tree->keys[i]);
   }
-  printf("]\n");
+  log_info("]\n");
+
   if (tree->child_ptr) {
     print_tree(tree->child_ptr);
   }
 }
 
-void free_btree(Btree* tree) {
+void print_tree(Btree* tree) {
+  if (!tree) return;
+  print_tree_helper(tree);
+  // Print metadata
+  log_info("]\n");
+  log_info("First occurence idxes: [");
+  for (size_t i = 0; i < tree->n_uniques; i++) {
+    log_info(" %d ", tree->first_unique_idxes[i]);
+  }
+  log_info("]\n");
+  log_info("Last occurence idxes: [");
+  for (size_t i = 0; i < tree->n_uniques; i++) {
+    log_info(" %d ", tree->last_unique_idxes[i]);
+  }
+  log_info("]\n");
+}
+
+void free_btree_nodes(Btree* tree) {
   if (!tree) return;
 
   if (tree->child_ptr) {
-    free_btree(tree->child_ptr);
+    free_btree_nodes(tree->child_ptr);
   }
-
   free(tree->keys);
+}
+
+void free_btree(Btree* tree) {
+  if (!tree) return;
+  free_btree_nodes(tree);
+
+  free(tree->first_unique_idxes);
+  free(tree->last_unique_idxes);
   free(tree);
 }

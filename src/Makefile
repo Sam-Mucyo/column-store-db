@@ -10,7 +10,7 @@ all: client server testlib
 CC = gcc -std=c99 -g -ggdb3
 
 # Default optimization level
-O ?= 0
+O ?= 3
 
 # Directory structure
 DB_DIR = db

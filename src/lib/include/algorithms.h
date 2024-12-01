@@ -3,6 +3,8 @@
 
 #include <stddef.h>
 
+size_t binary_search_left(int* sorted_data, size_t num_elements, int value);
+size_t binary_search_right(int* sorted_data, size_t num_elements, int value);
 /**
  * @brief sorts the `data` in ascending order and keeps track of their original positions.
  *

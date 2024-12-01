@@ -28,8 +28,23 @@ typedef struct Btree {
   struct Btree* child_ptr;
   int* keys;
   size_t n_keys;
+
+  // Global bookkeeping for unique values, etc.
   size_t fanout;
+  size_t n_uniques;
+  size_t* first_unique_idxes;
+  size_t* last_unique_idxes;
 } Btree;
+
+// TODO: refactor the above by moving global bookkeeping to a separate struct, say
+// BtreeIndex below, time permitting. they don't change per level node
+// typedef struct BtreeIndex {
+//   Btree* root;
+//   size_t fanout;
+//   size_t n_uniques;
+//   size_t* first_unique_idxes;
+//   size_t* last_unique_idxes;
+// };
 
 Btree* init_btree(int* data, size_t n_elts, size_t fanout);
 
@@ -38,10 +53,13 @@ Btree* init_btree(int* data, size_t n_elts, size_t fanout);
  *
  * @param key The key to search for.
  * @param tree The root of the B-tree.
- * @return an index `i` in the `data` array such that `data[i] == key`, or -1 if not
- *         found.
+ * @param is_left indicator for whether the caller is looking for first or last occurence
+ * @return an index `i` in the `data` array such that
+ *      `data[i - 1] < data[i] <= key` for i > 0 else 0,      if `is_left` is true (1)
+ * OR
+ *      `data[i] >= key > data[i + 1]` for i < n_elts,        if `is_left` is false (0)
  */
-ssize_t lookup(int key, Btree* tree);
+size_t lookup(int key, Btree* tree, int is_left);
 
 void print_tree(Btree* tree);
 

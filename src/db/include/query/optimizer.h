@@ -25,4 +25,6 @@ void cluster_idx_on(Table* table, Column* primary_col, message* send_message);
  */
 size_t idx_lookup_left(Column* column, int value);
 
+size_t idx_lookup_right(Column* column, int value);
+
 #endif /*  OPTIMIZER_H */

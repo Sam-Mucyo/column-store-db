@@ -80,50 +80,96 @@ size_t idx_lookup_left(Column *col, int value) {
     log_err("idx_lookup: Column %s does not have an index\n", col->name);
     return 0;
   }
-
-  if (value < col->min_value) {
-    return -1;
-  } else if (value > col->max_value) {
-    return -2;
-  }
-
   int *sorted_data = col->index->sorted_data;
   size_t num_elements = col->num_elements;
   IndexType idx_type = col->index->idx_type;
-  ssize_t match_idx = 0;
+  //   ssize_t match_idx = 0;
 
   // Handle edge cases
   if (value <= sorted_data[0]) return 0;
   if (value >= sorted_data[num_elements - 1]) return num_elements - 1;
 
   if (idx_type == BTREE_CLUSTERED || idx_type == BTREE_UNCLUSTERED) {
-    match_idx = lookup(value, col->root);
+    return lookup(value, col->root, 1);
+    // Btree guarantees that the sorted_data[match_idx] <= value, so we need to find the
+    // leftmost position where value is strictly greater than previous element
+    // log_info(
+    //     "Btree: should linear search after index Left lookup? %s\n",
+    //     match_idx < num_elements - 1 && sorted_data[match_idx] < value ? "Yes" : "No");
+
+    // // Case 1: Sorted_data [ a1, ..., value ] where a1, ... < value
+    // //                       ^
+    // //                       |
+    // //                    match_idx
+    // while (match_idx < num_elements - 1 && sorted_data[match_idx] < value) {
+    //   match_idx++;
+    // }
+
+    // // Case 2: Sorted_data [ value, ..., value ] where a1, ... < value
+    // //                                      ^
+    // //                                      |
+    // //                                  match_idx
+    // while (match_idx > 0 && sorted_data[match_idx - 1] == value) {
+    //   match_idx--;
+    // }
+    // return match_idx;
+
+    // //   Worst case that the sorted_data[match_idx] = value = sorted_data[match_idx]
+    // //    we want idx s.t. col->data[i - 1] < value
+    // log_info("Optimizer: should linear search after index Left lookup? %s\n",
+    //          match_idx > 0 && sorted_data[match_idx] == value ? "Yes" : "No");
+    // while (match_idx > 0 && sorted_data[match_idx] == value) {
+    //   match_idx--;
+    // }
+    // return sorted_data[match_idx] < value ? match_idx + 1 : match_idx;
   } else if (idx_type == SORTED_CLUSTERED || idx_type == SORTED_UNCLUSTERED) {
-    // Binary search for sorted index
-    size_t left = 0;
-    size_t right = num_elements - 1;
-
-    while (left < right) {
-      size_t mid = left + (right - left + 1) / 2;  // Ceiling division
-
-      if (sorted_data[mid] <= value) {
-        left = mid;
-      } else {
-        right = mid - 1;
-      }
-    }
-    match_idx = left;
+    return binary_search_left(sorted_data, num_elements, value);
+  }
+  log_err("idx_lookup: Unsupported index type; start scanning from the beginning\n");
+  return 0;
+}
+// TODO: Merge this function with idx_lookup_left and remove redundancy
+//
+size_t idx_lookup_right(Column *col, int value) {
+  if (!col->index || col->index->idx_type == NONE) {
+    log_err("idx_lookup: Column %s does not have an index\n", col->name);
+    return 0;
   }
 
-  //   Worst case that the sorted_data[match_idx] = value = sorted_data[match_idx]
-  //    we want idx s.t. col->data[i - 1] < value
-  //   printf("Optimizer: should linear search after index lookup? %s\n",
-  //          match_idx > 0 && sorted_data[match_idx] == value ? "Yes" : "No");
+  int *sorted_data = col->index->sorted_data;
+  size_t num_elements = col->num_elements;
+  IndexType idx_type = col->index->idx_type;
+  //   ssize_t match_idx = 0;
 
-  while (match_idx > 0 && sorted_data[match_idx] == value) {
-    match_idx--;
+  //   // Handle edge cases
+  //   if (value <= sorted_data[0]) return 0;
+  //   if (value >= sorted_data[num_elements - 1]) return num_elements - 1;
+
+  if (idx_type == BTREE_CLUSTERED || idx_type == BTREE_UNCLUSTERED) {
+    return lookup(value, col->root, 0);
+    // // Btree guarantees that the sorted_data[match_idx] <= value, so we need to find
+    // the
+    // // rightmost position where value is strictly less than next element
+    // log_info(
+    //     "Btree: should linear search after index Right lookup? %s\n",
+    //     match_idx < num_elements - 1 && sorted_data[match_idx] <= value ? "Yes" :
+    //     "No");
+    // while (match_idx < num_elements - 1 && sorted_data[match_idx] <= value) {
+    //   match_idx++;
+    // }
+    // log_info("Optimizer: should linear search after index Right lookup? %s\n",
+    //          (size_t)match_idx < num_elements - 1 && sorted_data[match_idx] <= value
+    //              ? "Yes"
+    //              : "No");
+    // // Find rightmost position where value is strictly less than next element
+    // while (((size_t)match_idx < num_elements - 1 && sorted_data[match_idx] <= value)) {
+    //   match_idx++;
+    // }
+    // return match_idx > 0 ? match_idx - 1 : 0;
+  } else if (idx_type == SORTED_CLUSTERED || idx_type == SORTED_UNCLUSTERED) {
+    return binary_search_right(sorted_data, num_elements, value);
   }
-  return match_idx;
+  return 0;
 }
 
 void reorder_nums(int *data, size_t n_elements, int *idx_order) {

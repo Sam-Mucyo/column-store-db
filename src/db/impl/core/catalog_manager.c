@@ -348,7 +348,6 @@ Status shutdown_catalog_manager(void) {
       if (idx_type != NONE) {
         if (col->index->idx_type == BTREE_CLUSTERED ||
             col->index->idx_type == BTREE_UNCLUSTERED) {
-          // Write the btree index to disk
           free_btree(col->root);
         }
         free(col->index->sorted_data);

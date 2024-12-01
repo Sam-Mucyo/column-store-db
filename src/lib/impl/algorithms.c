@@ -64,3 +64,46 @@ int sort(int* data, size_t n_elements, int* original_pos) {
 
   return 0;
 }
+
+size_t binary_search_right(int* sorted_data, size_t num_elements, int value) {
+  // Binary search for sorted index
+  size_t left = 0;
+  size_t right = num_elements - 1;
+
+  while (left < right) {
+    size_t mid = left + (right - left) / 2;  // Floor division
+
+    if (sorted_data[mid] <= value) {
+      left = mid + 1;
+    } else {
+      right = mid;
+    }
+  }
+
+  // Find rightmost position where value is strictly less than next element
+  while (((size_t)left < num_elements - 1 && sorted_data[left] <= value)) {
+    left++;
+  }
+  return left > 0 ? left - 1 : 0;
+}
+
+size_t binary_search_left(int* sorted_data, size_t num_elements, int value) {
+  // Binary search for sorted index
+  size_t left = 0;
+  size_t right = num_elements - 1;
+
+  while (left < right) {
+    size_t mid = left + (right - left + 1) / 2;  // Ceiling division
+
+    if (sorted_data[mid] <= value) {
+      left = mid;
+    } else {
+      right = mid - 1;
+    }
+  }
+  while (left > 0 && sorted_data[left] == value) {
+    left--;
+  }
+
+  return sorted_data[left] < value ? left + 1 : left;
+}
