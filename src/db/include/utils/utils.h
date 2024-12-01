@@ -52,8 +52,11 @@ void cs165_log(FILE *out, const char *format, ...);
 //
 // Usage: log_err("%s: error at line: %d", __func__, __LINE__);
 void log_err(const char *format, ...);
-
 void log_perf(const char *format, ...);
+void log_client_perf(FILE *out, const char *format, ...);
+
+// Get current time in microseconds
+double get_time();
 
 // log_info(format, ...)
 // Writes the string from @format to stdout, extendable for

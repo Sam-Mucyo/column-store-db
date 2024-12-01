@@ -8,6 +8,7 @@
 #include "client_context.h"
 #include "handler.h"
 #include "operators.h"
+#include "optimizer.h"
 #include "parse.h"
 #include "query_exec.h"
 #include "utils.h"
@@ -53,6 +54,8 @@ void exec_select(DbOperator *query, message *send_message) {
   SelectOperator *select_op = &query->operator_fields.select_operator;
   Comparator *comparator = select_op->comparator;
   Column *column = comparator->col;
+  size_t n_elts = column->num_elements;
+  int *data = (int *)column->data;
 
   // Create a new Column to store the result indices
   Column *result;
@@ -68,7 +71,7 @@ void exec_select(DbOperator *query, message *send_message) {
   // Allocate memory for the result data
   //   For simplicity, we will allocate the maximum possible size (for now).
   //   TODO: replace this with a dynamic array after implementing such a data structure.
-  result->data = malloc(sizeof(int) * column->num_elements);
+  result->data = malloc(sizeof(int) * n_elts);
   if (!result->data) {
     log_err("exec_select: Failed to allocate memory for result data\n");
     send_message->status = EXECUTION_ERROR;
@@ -76,26 +79,77 @@ void exec_select(DbOperator *query, message *send_message) {
     send_message->payload = NULL;
     return;
   }
+  int has_low_and_high =
+      comparator->type1 == GREATER_THAN_OR_EQUAL && comparator->type2 == LESS_THAN;
 
   cs165_log(stdout, "exec_select: Starting to scan\n");
 
-  if (column->num_elements < NUM_ELEMENTS_TO_MULTITHREAD) {
-    //   Milestone 1 : Single - core selection: to avoid the overhead of creating threads
-    result->num_elements = select_values_singlecore(column->data, column->num_elements,
-                                                    comparator, result->data);
+  // ref_posns is used to store the original positions of the data, this is used in
+  // in the second type of `select()` query that receives results from fetch.
+  //   Since indexes are on catalog columns, this `ref_posns` must always be NULL.
+  int using_temp_ref_posns = 0;
+
+  if (column->index && column->index->idx_type != NONE && !comparator->ref_posns) {
+    //   Milestone 3: Index-based selection
+    // Get offset: where to start scanning based on the low value
+    if (comparator->p_high - 1 < column->min_value ||
+        comparator->p_low > column->max_value) {
+      //   if p_high is less than the min value, then no need to scan
+      result->num_elements = 0;
+      log_info("exec_select: No elements qualify the selection criteria\n");
+      send_message->status = OK_DONE;
+      send_message->payload = "Done";
+      send_message->length = strlen(send_message->payload);
+      return;
+    }
+
+    if (has_low_and_high) {
+      // since low of query > min_value idx must be found
+      size_t start_idx = comparator->p_low <= column->min_value
+                             ? 0
+                             : idx_lookup_left(column, comparator->p_low);
+      size_t end_idx = comparator->p_high >= column->max_value
+                           ? n_elts - 1
+                           : idx_lookup_right(column, comparator->p_high - 1);
+      result->num_elements = end_idx - start_idx + 1;
+      result->data = malloc(sizeof(int) * result->num_elements);
+      memcpy(result->data, column->index->positions + start_idx,
+             sizeof(int) * result->num_elements);
+      log_info("p_low: %ld, p_high: %ld\n", comparator->p_low, comparator->p_high);
+      log_info("idx suggests l,r where sorted_data[%ld] = %d, sorted_data[%ld] = %d\n",
+               start_idx, column->index->sorted_data[start_idx], end_idx,
+               column->index->sorted_data[end_idx]);
+
+      //   show positions
+      for (size_t i = 0; i < result->num_elements; i++) {
+        printf("%d ", ((int *)result->data)[i]);
+      }
+
+      //   log_info(
+      //       "exec_select: used index to get starting position: %ld\nwhere "
+      //       "sorted_data[%ld] = %d\n",
+      //       start_idx, start_idx, column->index->sorted_data[start_idx]);
+    }
+  } else if (n_elts < NUM_ELEMENTS_TO_MULTITHREAD || query->context->is_single_core) {
+    //   Milestone 1 : Single - core selection: to avoid the overhead of creating
+    //   threads
+    result->num_elements =
+        select_values_singlecore(data, n_elts, comparator, result->data);
     log_perf("\nqualifying range: [%ld, %ld]\n", comparator->p_low, comparator->p_high);
-    log_perf("selectivity: %d/%zu = %.2f%%\n", result->num_elements, column->num_elements,
-             (double)result->num_elements / column->num_elements * 100);
+    log_perf("selectivity: %d/%zu = %.2f%%\n", result->num_elements, n_elts,
+             (double)result->num_elements / n_elts * 100);
   } else {
     //   Milestone 2: Multi-core selection
     Comparator **comparators = malloc(sizeof(Comparator *));
     comparators[0] = comparator;
     Column **result_columns = malloc(sizeof(Column *));
     result_columns[0] = result;
-    batch_select_multi_core((int *)column->data, column->num_elements, comparators,
-                            result_columns, 1);
+    batch_select_multi_core(data, n_elts, comparators, result_columns, 1);
   }
   log_info("exec_select: Selection operation completed successfully.\n");
+
+  //   Reset the temporary reference positions
+  if (using_temp_ref_posns) comparator->ref_posns = NULL;
 
   //   set send_message
   send_message->status = OK_DONE;
@@ -235,9 +289,11 @@ size_t select_values_singlecore(const int *data, size_t num_elements,
     return -1;
   }
   int *ref_posns = comparator->ref_posns;
+  int can_terminate = comparator->on_sorted_data && comparator->p_high;
 
   size_t result_count = 0;
   for (size_t i = 0; i < num_elements; i += 1) {
+    if (can_terminate && comparator->p_high < data[i]) break;
     if (should_include(data[i], comparator)) {
       result_indices[result_count++] = ref_posns ? (size_t)ref_posns[i] : i;
     }

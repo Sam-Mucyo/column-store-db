@@ -73,7 +73,7 @@ void exec_fetch(DbOperator *query, message *send_message) {
     //   TODO: consider alternative implementation for fetching values, while updating
     //   stats. How can we optimize with batching, SIMD, etc?
     int value = ((int *)fetch_col->data)[index];
-    // cs165_log(stdout, "%d ", ((int *)fetch_col->data)[index]);
+    cs165_log(stdout, "index= %zu, val= %d ", index, ((int *)fetch_col->data)[index]);
     ((int *)fetch_result->data)[i] = value;
 
     fetch_result->sum += value;

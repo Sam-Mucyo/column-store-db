@@ -42,15 +42,20 @@ SOFTWARE.
 #include <sys/un.h>
 #include <unistd.h>
 
+#include "algorithms.h"
 #include "catalog_manager.h"
 #include "client_context.h"
 #include "common.h"
 #include "handler.h"
+#include "optimizer.h"
 #include "utils.h"
 
 #define DEFAULT_QUERY_BUFFER_SIZE 1024
 
-int receive_columns(int client_socket);
+int client_id = 0;
+int session_id = 0;
+
+int receive_columns(int client_socket, message *send_message);
 
 /**
  * handle_client(client_socket)
@@ -59,8 +64,8 @@ int receive_columns(int client_socket);
  **/
 void handle_client(int client_socket, int *shutdown) {
   int length = 0;
-
   log_info("Connected to socket: %d.\n", client_socket);
+  session_id++;
 
   // Create two messages, one from which to read and one from which to receive
   message send_message = {.status = OK_WAIT_FOR_RESPONSE, .length = 0, .payload = NULL};
@@ -86,13 +91,15 @@ void handle_client(int client_socket, int *shutdown) {
       break;
     }
 
-    if (recv_message.status == CSV_TRANSFER) receive_columns(client_socket);
+    if (recv_message.status == CSV_TRANSFER)
+      receive_columns(client_socket, &send_message);
 
     if (recv_message.status == INCOMING_QUERY) {
       char recv_buffer[recv_message.length + 1];
       length = recv(client_socket, recv_buffer, recv_message.length, 0);
       recv_message.payload = recv_buffer;
       recv_message.payload[recv_message.length] = '\0';
+
       cs165_log(stdout, "Received message: %s\n", recv_message.payload);
 
       handle_query(recv_message.payload, &send_message, client_socket, client_context);
@@ -109,7 +116,6 @@ void handle_client(int client_socket, int *shutdown) {
       log_err("Failed to send message.");
     }
   }
-
   log_info("Connection closed at socket %d!\n", client_socket);
   close(client_socket);
 }
@@ -195,10 +201,15 @@ int main(void) {
   return 0;
 }
 
-int receive_columns(int socket) {
+int receive_columns(int socket, message *send_message) {
   log_info("Server: Receiving column data from client at socket %d\n", socket);
   ColumnMetadata metadata = {0};
   ssize_t bytes_received = 0;
+  Table *table = NULL;
+  Column *primary_col = NULL;    // Primary column for indexing, this is the first column
+                                 // with clustered index
+  Column *secondary_col = NULL;  // Secondary column for indexing, this is unclustered
+                                 // column
 
   while ((bytes_received = recv(socket, &metadata, sizeof(ColumnMetadata), 0)) > 0) {
     if (bytes_received != sizeof(ColumnMetadata)) {
@@ -215,8 +226,16 @@ int receive_columns(int socket) {
 
     cs165_log(stdout, "Received metadata for column %s\n", metadata.name);
     Column *col = get_column_from_catalog(metadata.name);
-    if (!col) {
-      log_err("Failed to create or get column: %s\n", metadata.name);
+
+    // extract table name from column name. e.g. metadata.name=db1.tbl1.col1 -> tbl1
+    char table_name[strlen(metadata.name) + 1];
+    strcpy(table_name, metadata.name);
+    char *table_name_ptr = strtok(table_name, ".");  // first call gets "db1"
+    table_name_ptr = strtok(NULL, ".");              // second call gets "tbl1"
+
+    if (!table && table_name_ptr) table = get_table_from_catalog(table_name_ptr);
+    if (!col || !table) {
+      log_err("Failed to find table and column for metadata %s\n", metadata.name);
       return -1;
     }
     col->num_elements = metadata.num_elements;
@@ -282,6 +301,17 @@ int receive_columns(int socket) {
               metadata.name, file_size, total_received);
       return -1;
     }
+
+    IndexType idx_type = col->index ? col->index->idx_type : NONE;
+    if (idx_type != NONE) {
+      if (!primary_col && (idx_type == SORTED_CLUSTERED || idx_type == BTREE_CLUSTERED)) {
+        primary_col = col;
+      }
+      if (!secondary_col &&
+          (idx_type == SORTED_UNCLUSTERED || idx_type == BTREE_UNCLUSTERED)) {
+        secondary_col = col;
+      }
+    }
     col->is_dirty = 0;
     // NOTE: Differing this for `shutdown`
     // // Ensure data is written to disk
@@ -291,8 +321,14 @@ int receive_columns(int socket) {
     //   return -1;
     // }
 
-    printf("Successfully received and stored data for column %s\n", metadata.name);
+    log_info("Successfully received and stored data for column %s\n", metadata.name);
   }
+
+  if (!primary_col) return 0;
+  create_idx_on(primary_col, send_message);
+  //   cluster_idx_on(table, primary_col, send_message);
+
+  if (secondary_col) create_idx_on(secondary_col, send_message);
 
   return 0;
 }

@@ -1,16 +1,8 @@
 #include "handler.h"
 
 #include <string.h>
-#include <sys/time.h>
-#include <time.h>
 
-// Get current time in microseconds
-double get_time() {
-  struct timeval tv;
-  gettimeofday(&tv, NULL);
-  return tv.tv_sec * 1e6 + tv.tv_usec;
-}
-
+#include "utils.h"
 char *handle_print(DbOperator *query);
 void handle_batched_queries(DbOperator *query, message *send_message);
 void handle_dbOperator(DbOperator *query, message *send_message);
@@ -45,12 +37,13 @@ void handle_query(char *query, message *send_message, int client_socket,
 void handle_dbOperator(DbOperator *query, message *send_message) {
   switch (query->type) {
     case CREATE:
+    case CREATE_INDEX:
       exec_create(query, send_message);
       break;
     case SELECT: {
       double t0 = get_time();
       exec_select(query, send_message);
-      log_perf("exec_select: t = %.6fμs\n\n", get_time() - t0);
+      log_client_perf(stdout, " t_exec = %.6fμs\n", get_time() - t0);
     } break;
     case FETCH:
       exec_fetch(query, send_message);
@@ -78,11 +71,13 @@ void handle_dbOperator(DbOperator *query, message *send_message) {
     case INSERT:
       exec_insert(query, send_message);
       break;
-    case EXEC_BATCH:
+    case EXEC_BATCH: {
       // Currently supports only batch select queries, per milestone 2 requirements
+      double t0 = get_time();
       handle_batched_queries(query, send_message);
+      log_client_perf(stdout, "\thandle_batched_queries: t = %.6fμs\n", get_time() - t0);
       set_batch_queries(query->context, 0);
-      break;
+    } break;
     default:
       cs165_log(stdout, "execute_DbOperator: Unknown query type\n");
       break;
@@ -105,9 +100,7 @@ void handle_batched_queries(DbOperator *query, message *send_message) {
                  "handle_batched_queries: invalid batched query execution request\nOnly "
                  "batched select queries are supported");
   }
-  double t0 = get_time();
   exec_batch_select(query, send_message);
-  log_perf("\nexec_batch_select: t = %.6fμs\n\n", get_time() - t0);
 }
 
 /**

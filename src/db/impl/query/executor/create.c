@@ -11,9 +11,33 @@ Status create_db(const char *db_name);
 Table *create_table(Db *db, const char *name, size_t num_columns, Status *status);
 Column *create_column(Table *table, const char *name, bool sorted, Status *status);
 
+/**
+ * @brief Executes a create query. This can be a
+ * 1. create _DB, create _TABLE, or create _COLUMN query or
+ * 2. a create index query if the query type is CREATE_INDEX
+ *
+ * @param query
+ * @param send_message
+ */
 void exec_create(DbOperator *query, message *send_message) {
   // TODO: Make `create_` functions take in `send_message` and set the status there.
   //   Just for consistency and cleaner code.
+
+  if (query->type == CREATE_INDEX) {
+    Column *col = query->operator_fields.create_index_operator.col;
+    IndexType idx_type = query->operator_fields.create_index_operator.idx_type;
+
+    cs165_log(stdout, "exec_create: Creating index on column %s\n", col->name);
+    col->index = malloc(sizeof(ColumnIndex));
+    col->index->idx_type = idx_type;
+
+    // Set these to NULL since all create_idx queries are before data is loaded
+    // The actual index is made on during `load`
+    col->index->sorted_data = NULL;
+    col->index->positions = NULL;
+    return;
+  }
+
   char *res_msg = NULL;
   CreateType create_type = query->operator_fields.create_operator.create_type;
   if (create_type == _DB) {
@@ -195,6 +219,8 @@ Column *create_column(Table *table, const char *name, bool sorted, Status *ret_s
   new_column->min_value = 0;
   new_column->max_value = 0;
   new_column->mmap_size = 0;
+  new_column->disk_fd = -1;
+  new_column->index = NULL;
 
   table->num_cols++;
   log_info("Column %s created successfully\n", name);

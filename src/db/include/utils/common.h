@@ -19,6 +19,8 @@
 #define CSV_BUFFER_SIZE 1024
 #define MAX_COLUMNS 100  // TODO: Make this dynamic in upcoming milestones
 #define CSV_CHUNK_SIZE 4096
+#define BTREE_FANOUT 1024
+
 typedef struct {
   char column_name[256];  // of the form "db.table.column"
   //   int data_type;
@@ -42,6 +44,51 @@ typedef struct ColumnMetadata {
  * additional types.
  **/
 typedef enum DataType { INT, LONG, DOUBLE } DataType;
+
+/*
+ * tells the databaase what type of operator this is
+ */
+typedef enum OperatorType {
+  CREATE,
+  CREATE_INDEX,
+  INSERT,
+  LOAD,
+  EXEC_BATCH,
+  SELECT,
+  FETCH,
+  PRINT,
+  AVG,
+  MIN,
+  MAX,
+  SUM,
+  ADD,
+  SUB,
+  SHUTDOWN,
+} OperatorType;
+
+// Defines a comparator flag between two values.
+typedef enum ComparatorType {
+  NO_COMPARISON = 0,
+  LESS_THAN = 1,
+  GREATER_THAN = 2,
+  EQUAL = 4,
+  LESS_THAN_OR_EQUAL = 5,
+  GREATER_THAN_OR_EQUAL = 6
+} ComparatorType;
+
+typedef enum CreateType {
+  _DB,
+  _TABLE,
+  _COLUMN,
+} CreateType;
+
+typedef enum IndexType {
+  BTREE_CLUSTERED,
+  BTREE_UNCLUSTERED,
+  SORTED_CLUSTERED,
+  SORTED_UNCLUSTERED,
+  NONE,
+} IndexType;
 
 /**
  * Error codes used to indicate the outcome of an API call

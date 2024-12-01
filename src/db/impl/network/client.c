@@ -78,6 +78,10 @@ int main(void) {
     // Convert to message and send the message and the
     // payload directly to the server.
     if (strlen(read_buffer) <= 1) continue;
+    if (strncmp(read_buffer, "--", 2) == 0) {
+      // The -- signifies a comment line, no need to send to server
+      continue;
+    }
 
     if (strncmp(read_buffer, "shutdown", 8) == 0) {
       send_message.status = SERVER_SHUTDOWN;
@@ -86,6 +90,9 @@ int main(void) {
       }
       exit(0);
     }
+
+    log_client_perf(stdout, "--Query: %s", read_buffer);
+    double query_t0 = get_time();
 
     // Check if the input is a load command
     if (strncmp(read_buffer, "load(", 5) == 0) {
@@ -129,9 +136,10 @@ int main(void) {
         // Calculate number of bytes in response package
         int num_bytes = (int)recv_message.length;
         char payload[num_bytes + 1];
-
         // Receive the payload and print it out
         if ((len = recv_message_safe(client_socket, payload, num_bytes)) > 0) {
+          log_client_perf(stdout, "--\tt = %.6fμs\n\n", recv_message.payload,
+                          get_time() - query_t0);
           payload[num_bytes] = '\0';
           // TODO: refactor to only have server send payload only
           // if it was a `print` command otherwise, send just the status. (time

@@ -3,10 +3,33 @@
 
 #include <stdlib.h>
 
+#include "btree.h"
 #include "common.h"
+
+/**
+ * @brief ColumnIndex is the sorted copy of the base data in a column.
+ * We keep the data and their positions as separate arrays since the application mostly
+ * needs one or the other. For example, for select, we need to binary search the data,
+ * but fetch would be interested in the positions of qualifying data. So no need to pull
+ * all data and positions in memory, if only working with one.
+ *
+ * - `sorted_data`: the sorted data array
+ * - `positions`: the positions of the data in the original array
+ * - `idx_type`: the type of index (see `IndexType` enum)
+ * The number of elements in the `sorted_data` and `positions` arrays must be the same as
+ * column's `Column->num_elements`. So storing it would be redundant (maybe helpful tho)
+ */
+typedef struct ColumnIndex {
+  int *sorted_data;
+  int *positions;
+  IndexType idx_type;
+} ColumnIndex;
+
 typedef struct Column {
   char name[MAX_SIZE_NAME];
   DataType data_type;
+  Btree *root;
+  ColumnIndex *index;
   void *data;
   size_t mmap_size;  // can be derived from mmap_size (clean up later), also a result
                      // column doesn't need to have this; what'd this mean for `insert`?

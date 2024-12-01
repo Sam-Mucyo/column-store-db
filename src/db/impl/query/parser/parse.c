@@ -52,12 +52,6 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
   DbOperator *dbo = NULL;  // = malloc(sizeof(DbOperator));
   send_message->status = OK_WAIT_FOR_RESPONSE;
 
-  if (strncmp(query_command, "--", 2) == 0) {
-    send_message->status = OK_DONE;
-    // The -- signifies a comment line, no operator needed.
-    return NULL;
-  }
-
   char *equals_pointer = strchr(query_command, '=');
   char *handle = query_command;
   if (equals_pointer != NULL) {
@@ -298,6 +292,80 @@ DbOperator *parse_create_db(char *create_arguments) {
   }
 }
 
+Column *get_chandle_or_dbtblcol(char *name) {
+  Column *col = NULL;
+  // NOTE: based on project language, we can assume column names include dots
+  if (strchr(name, '.') != NULL) {
+    col = get_column_from_catalog(name);  // get the column from the catalog
+  } else {
+    col = get_handle(name);  // from client context (variable pool)
+  }
+  return col;
+}
+
+/**
+ * @brief parse_create_index
+ * This method takes in a string representing the arguments to create an index, parses
+ * them, and returns a DbOperator if the arguments are valid. Otherwise, it returns NULL.
+ * Example original query:
+ * create(idx,db1.tbl4.col3,sorted,clustered)  --- Create a clustered index on col3
+ * create(idx,db1.tbl4.col2,btree,unclustered) -- Create an unclustered btree index on
+ * col2
+ *
+ * @param args: e.g. db1.tbl4.col3,sorted,clustered)
+ * @return DbOperator* with col, IndexType: btree_clustered, sorted_unclustered, etc.
+ */
+DbOperator *parse_create_index(char *args) {
+  message_status status = OK_DONE;
+  char **args_index = &args;
+  char *db_tbl_col = next_token(args_index, &status);
+  char *index_type = next_token(args_index, &status);
+  char *clustered = next_token(args_index, &status);
+
+  // not enough arguments
+  if (status == INCORRECT_FORMAT) {
+    log_err("L%d: parse_create_index failed. Not enough arguments\n", __LINE__);
+  }
+
+  // read and chop off last char, which should be a ')'
+  int last_char = strlen(clustered) - 1;
+  if (clustered[last_char] != ')') {
+    log_err("L%d: parse_create_index failed. expected ')'\n", __LINE__);
+    return NULL;
+  }
+  // replace the ')' with a null terminating character.
+  clustered[last_char] = '\0';
+  // check that the database argument is the current active database
+  Column *col = get_chandle_or_dbtblcol(db_tbl_col);
+  if (!col) {
+    log_err("L%d: parse_create_index failed. got bad column: %s\n", __LINE__, db_tbl_col);
+    return NULL;
+  }
+  // validate the index type
+  IndexType idx_type;
+  if (strcmp(index_type, "btree") == 0 && strcmp(clustered, "clustered") == 0) {
+    idx_type = BTREE_CLUSTERED;
+  } else if (strcmp(index_type, "btree") == 0 && strcmp(clustered, "unclustered") == 0) {
+    idx_type = BTREE_UNCLUSTERED;
+  } else if (strcmp(index_type, "sorted") == 0 && strcmp(clustered, "clustered") == 0) {
+    idx_type = SORTED_CLUSTERED;
+  } else if (strcmp(index_type, "sorted") == 0 && strcmp(clustered, "unclustered") == 0) {
+    idx_type = SORTED_UNCLUSTERED;
+  } else {
+    log_err(
+        "L%d: parse_create_index failed. got bad index type: type=%s, cluster_type=%s\n",
+        __LINE__, index_type, clustered);
+    return NULL;
+  }
+
+  // make create dbo for index
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  dbo->type = CREATE_INDEX;
+  dbo->operator_fields.create_index_operator.col = col;
+  dbo->operator_fields.create_index_operator.idx_type = idx_type;
+  return dbo;
+}
+
 /**
  * parse_create parses a create statement and then passes the necessary arguments off
  *to the next function
@@ -325,6 +393,8 @@ DbOperator *parse_create(char *create_arguments) {
         dbo = parse_create_tbl(tokenizer_copy);
       } else if (strcmp(token, "col") == 0) {
         dbo = parse_create_column(tokenizer_copy);
+      } else if (strcmp(token, "idx") == 0) {
+        dbo = parse_create_index(tokenizer_copy);
       } else {
         mes_status = UNKNOWN_COMMAND;
       }
@@ -404,17 +474,6 @@ DbOperator *parse_insert(char *query_command, message *send_message) {
   }
 }
 
-Column *get_chandle_or_dbtblcol(char *name) {
-  Column *col = NULL;
-  // NOTE: based on project language, we can assume column names include dots
-  if (strchr(name, '.') != NULL) {
-    col = get_column_from_catalog(name);  // get the column from the catalog
-  } else {
-    col = get_handle(name);  // from client context (variable pool)
-  }
-  return col;
-}
-
 /**
  * @brief parse_select
  * This method takes in a string representing the arguments to select from a table, parses
@@ -431,7 +490,7 @@ Column *get_chandle_or_dbtblcol(char *name) {
 DbOperator *parse_select(char *query_command, char *handle) {
   message_status status = OK_DONE;
   char **command_index = &query_command;
-
+  log_client_perf(stdout, "select%s: ", query_command);
   // trim parenthesis using `trim_parenthesis` function
   trim_parenthesis(query_command);
   trim_whitespace(query_command);
@@ -491,6 +550,9 @@ DbOperator *parse_select(char *query_command, char *handle) {
   cs165_log(stdout, "parse_select: got column %s\n", col->name);
   dbo->operator_fields.select_operator.comparator->col = col;
   dbo->operator_fields.select_operator.comparator->ref_posns = NULL;
+
+  // We let the query handler decide on this before execution
+  dbo->operator_fields.select_operator.comparator->on_sorted_data = 0;
   dbo->operator_fields.select_operator.res_handle = strdup(handle);
 
   // If posn_vec is not NULL, then we have a type 2 select query

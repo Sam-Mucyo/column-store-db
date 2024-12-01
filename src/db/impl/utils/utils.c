@@ -10,6 +10,8 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/time.h>
+#include <time.h>
 #include <unistd.h>
 
 #define ANSI_COLOR_RED "\x1b[31m"
@@ -19,7 +21,15 @@
 // #define LOG 1
 #define LOG_ERR 1
 // #define LOG_INFO 1
-#define LOG_PERF 1
+// #define LOG_PERF 1
+#define LOG_SESSION_PERF 1
+
+// Get current time in microseconds
+double get_time() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  return tv.tv_sec * 1e6 + tv.tv_usec;
+}
 
 /* removes newline characters from the input string.
  * Shifts characters over and shortens the length of
@@ -142,7 +152,31 @@ void log_info(const char *format, ...) {
 #endif
 }
 
+void log_client_perf(FILE *out, const char *format, ...) {
+#ifdef LOG_SESSION_PERF
+  va_list v;
+  va_start(v, format);
+  vfprintf(out, format, v);
+  va_end(v);
+#else
+  (void)out;
+  (void)format;
+#endif
+}
+
+/**
+ * @brief handles error by updating the message to be sent back to the client as
+ * appropriate. Sets the message status to EXECUTION_ERROR and the payload to the
+ * error message. This won't log on the server-side, since the error_message might be
+ * different for debugging purposes.
+ *
+ * @param send_message
+ * @param error_message
+ */
 void handle_error(message *send_message, char *error_message) {
+  if (send_message == NULL) {
+    return;
+  }
   send_message->status = EXECUTION_ERROR;
   send_message->payload = error_message;
   send_message->length = strlen(send_message->payload);
