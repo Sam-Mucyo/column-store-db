@@ -326,7 +326,7 @@ int receive_columns(int socket, message *send_message) {
 
   if (!primary_col) return 0;
   create_idx_on(primary_col, send_message);
-  //   cluster_idx_on(table, primary_col, send_message);
+  cluster_idx_on(table, primary_col, send_message);
 
   if (secondary_col) create_idx_on(secondary_col, send_message);
 
