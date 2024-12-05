@@ -223,8 +223,13 @@ void exec_batch_select(DbOperator *query, message *send_message) {
     }
   }
 
-  batch_select_multi_core((int *)source_column->data, num_elements, comparators,
-                          result_columns, num_queries);
+  if (query->context->is_single_core) {
+    batch_select_single_core((int *)source_column->data, num_elements, comparators,
+                             result_columns, num_queries);
+  } else {
+    batch_select_multi_core((int *)source_column->data, num_elements, comparators,
+                            result_columns, num_queries);
+  }
   // Clean up and set success message
   free(result_columns);
   vector_destroy(batch_queries);
