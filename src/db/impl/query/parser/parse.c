@@ -30,6 +30,7 @@ DbOperator *parse_fetch(char *fetch_arguments, char *handle);
 DbOperator *parse_aggr(char *aggr_arguments, char *handle, OperatorType type);
 DbOperator *parse_arithmetic(char *arithmetic_arguments, char *handle, OperatorType type);
 DbOperator *parse_print(char *print_arguments);
+DbOperator *parse_join(char *join_arguments, char *handle, message *send_message);
 
 /**
  * @brief parse_command
@@ -120,6 +121,9 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
   } else if (strncmp(query_command, "single_core_execute", 19) == 0) {
     context->is_single_core = 0;
     send_message->status = OK_DONE;
+  } else if (strncmp(query_command, "join", 4) == 0) {
+    query_command += 4;
+    dbo = parse_join(query_command, handle, send_message);
   } else {
     send_message->status = UNKNOWN_COMMAND;
   }
@@ -786,5 +790,98 @@ DbOperator *parse_print(char *query_command) {
 
   cs165_log(stdout, "handle_to_print: %s\n", handle);
   log_info("Successfully parsed print command\n");
+  return dbo;
+}
+
+/**
+ * @brief
+
+ Parses the following 4 types of join queries:
+    t1,t2=join(f1,p1,f2,p2,grace-hash)
+    t1,t2=join(f1,p1,f2,p2,naive-hash)
+    t1,t2=join(f1,p1,f2,p2,hash)
+    t1,t2=join(f1,p1,f2,p2,nested-loop)
+
+ so example input would be:
+    query_command = "f1,p1,f2,p2,grace-hash"
+    handle = "t1,t2"
+
+ * @param query_command
+ * @param handle
+ * @param send_message
+ * @return DbOperator*
+ */
+DbOperator *parse_join(char *query_command, char *handle, message *send_message) {
+  log_info("L%d: parse_join received: %s\n", __LINE__, query_command);
+
+  trim_parenthesis(query_command);
+  trim_whitespace(query_command);
+
+  char *psn1 = NULL, *psn2 = NULL, *vals1 = NULL, *vals2 = NULL, *join_type = NULL;
+  // use next_token to get the values of the join query
+  message_status status = OK_DONE;
+  char *error_message = "L%d: parse_join failed. Not enough arguments\n";
+  char **command_index = &query_command;
+  psn1 = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
+
+  psn2 = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
+
+  vals1 = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
+
+  vals2 = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
+
+  join_type = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
+
+  // Get the columns from the catalog
+  Column *psn1_col = get_handle(psn1);
+  Column *psn2_col = get_handle(psn2);
+  Column *vals1_col = get_handle(vals1);
+  Column *vals2_col = get_handle(vals2);
+
+  if (!psn1_col || !psn2_col || !vals1_col || !vals2_col) {
+    log_err("L%d: parse_join failed. one or more of the given handles are invalid\n",
+            __LINE__);
+    return NULL;
+  }
+
+  // Make DbOperator for join
+  DbOperator *dbo = malloc(sizeof(DbOperator));
+  if (dbo == NULL) {
+    log_err("L%d: parse_join failed. malloc for DbOperator failed\n", __LINE__);
+    return NULL;
+  }
+
+  dbo->type = JOIN;
+  dbo->operator_fields.join_operator.posn1 = psn1_col;
+  dbo->operator_fields.join_operator.posn2 = psn2_col;
+  dbo->operator_fields.join_operator.vals1 = vals1_col;
+  dbo->operator_fields.join_operator.vals2 = vals2_col;
+  dbo->operator_fields.join_operator.res_handle = handle;  // handle to store result
+
+  switch (join_type[0]) {
+    case 'g':  // grace-hash
+      dbo->operator_fields.join_operator.join_type = GRACE_HASH;
+      break;
+    case 'n':  // naive-hash or nested-loop
+      if (join_type[1] == 'a') {
+        dbo->operator_fields.join_operator.join_type = NAIVE_HASH;
+      } else {
+        dbo->operator_fields.join_operator.join_type = NESTED_LOOP;
+      }
+      break;
+    case 'h':  // hash
+      dbo->operator_fields.join_operator.join_type = HASH;
+      break;
+    default:
+      log_err("L%d: parse_join failed. invalid join type\n", __LINE__);
+      return NULL;
+  }
+
+  log_info("Successfully parsed join command\n");
   return dbo;
 }

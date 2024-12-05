@@ -63,6 +63,7 @@ typedef enum OperatorType {
   SUM,
   ADD,
   SUB,
+  JOIN,
   SHUTDOWN,
 } OperatorType;
 
@@ -89,6 +90,16 @@ typedef enum IndexType {
   SORTED_UNCLUSTERED,
   NONE,
 } IndexType;
+/**
+ * @brief  Parses the following 4 types of join queries:
+
+    t1,t2=join(f1,p1,f2,p2,grace-hash)
+    t1,t2=join(f1,p1,f2,p2,naive-hash)
+    t1,t2=join(f1,p1,f2,p2,hash)
+    t1,t2=join(f1,p1,f2,p2,nested-loop)
+ *
+ */
+typedef enum JoinType { GRACE_HASH, NAIVE_HASH, HASH, NESTED_LOOP } JoinType;
 
 /**
  * Error codes used to indicate the outcome of an API call
