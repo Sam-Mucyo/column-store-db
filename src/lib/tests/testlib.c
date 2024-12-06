@@ -2,6 +2,7 @@
 
 #include "algorithms.h"
 #include "btree.h"
+#include "hash_table.h"
 
 int main(void) {
   printf("\n\ntesting sort...\n");
@@ -11,6 +12,9 @@ int main(void) {
   test_btree();
 
   printf("\n\nAll tests passed!\n");
+
+  printf("\n\ntesting hashmap...\n");
+  test_hashmap();
 
   return 0;
 }
