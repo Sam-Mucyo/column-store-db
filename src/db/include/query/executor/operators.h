@@ -86,7 +86,8 @@ typedef struct JoinOperator {
   Column *posn2;
   Column *vals1;
   Column *vals2;
-  char *res_handle;
+  char *res_handle1;
+  char *res_handle2;
   JoinType join_type;
 } JoinOperator;
 

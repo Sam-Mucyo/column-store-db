@@ -822,16 +822,16 @@ DbOperator *parse_join(char *query_command, char *handle, message *send_message)
   message_status status = OK_DONE;
   char *error_message = "L%d: parse_join failed. Not enough arguments\n";
   char **command_index = &query_command;
-  psn1 = next_token(command_index, &status);
-  if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
-
-  psn2 = next_token(command_index, &status);
-  if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
-
   vals1 = next_token(command_index, &status);
   if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
 
+  psn1 = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
+
   vals2 = next_token(command_index, &status);
+  if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
+
+  psn2 = next_token(command_index, &status);
   if (status == INCORRECT_FORMAT) handle_error(send_message, error_message);
 
   join_type = next_token(command_index, &status);
@@ -861,7 +861,12 @@ DbOperator *parse_join(char *query_command, char *handle, message *send_message)
   dbo->operator_fields.join_operator.posn2 = psn2_col;
   dbo->operator_fields.join_operator.vals1 = vals1_col;
   dbo->operator_fields.join_operator.vals2 = vals2_col;
-  dbo->operator_fields.join_operator.res_handle = handle;  // handle to store result
+
+  // split the handle into two table names
+  char *handle1 = strsep(&handle, ",");
+  char *handle2 = handle;
+  dbo->operator_fields.join_operator.res_handle1 = handle1;
+  dbo->operator_fields.join_operator.res_handle2 = handle2;
 
   switch (join_type[0]) {
     case 'g':  // grace-hash

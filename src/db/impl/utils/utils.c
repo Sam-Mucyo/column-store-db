@@ -19,7 +19,9 @@
 #define ANSI_COLOR_RESET "\x1b[0m"
 
 // #define LOG 1
+
 #define LOG_ERR 1
+// #define LOG_DEBUG 1
 // #define LOG_INFO 1
 // #define LOG_PERF 1
 #define LOG_SESSION_PERF 1
@@ -125,6 +127,18 @@ void log_perf(const char *format, ...) {
 #endif
 }
 
+void log_debug(const char *format, ...) {
+#ifdef LOG_DEBUG
+  va_list v;
+  va_start(v, format);
+  fprintf(stderr, ANSI_COLOR_RED);
+  vfprintf(stderr, format, v);
+  fprintf(stderr, ANSI_COLOR_RESET);
+  va_end(v);
+#else
+  (void)format;
+#endif
+}
 void log_err(const char *format, ...) {
 #ifdef LOG_ERR
   va_list v;
