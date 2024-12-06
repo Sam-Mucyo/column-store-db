@@ -81,6 +81,16 @@ typedef struct PrintOperator {
   size_t num_columns;
 } PrintOperator;
 
+typedef struct JoinOperator {
+  Column *posn1;
+  Column *posn2;
+  Column *vals1;
+  Column *vals2;
+  char *res_handle1;
+  char *res_handle2;
+  JoinType join_type;
+} JoinOperator;
+
 /*
  * union type holding the fields of any operator
  */
@@ -94,6 +104,7 @@ typedef union OperatorFields {
   PrintOperator print_operator;
   AggregateOperator aggregate_operator;
   ArithmeticOperator arithmetic_operator;
+  JoinOperator join_operator;
 } OperatorFields;
 /*
  * DbOperator holds the following fields:

@@ -53,11 +53,6 @@ void create_idx_on(Column *col, message *send_message) {
 
 void cluster_idx_on(Table *table, Column *primary_col, message *send_message) {
   (void)send_message;
-  log_err(
-      "cluster_idx: clustering index not implemented yet; Got table: %s, primary column: "
-      "%s\n",
-      table->name, primary_col->name);
-
   // Cluster the primary column if it exists
   int *idx_order = primary_col->index->positions;
 

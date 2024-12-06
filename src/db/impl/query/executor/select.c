@@ -120,11 +120,6 @@ void exec_select(DbOperator *query, message *send_message) {
                start_idx, column->index->sorted_data[start_idx], end_idx,
                column->index->sorted_data[end_idx]);
 
-      //   show positions
-      for (size_t i = 0; i < result->num_elements; i++) {
-        printf("%d ", ((int *)result->data)[i]);
-      }
-
       //   log_info(
       //       "exec_select: used index to get starting position: %ld\nwhere "
       //       "sorted_data[%ld] = %d\n",
@@ -228,8 +223,13 @@ void exec_batch_select(DbOperator *query, message *send_message) {
     }
   }
 
-  batch_select_multi_core((int *)source_column->data, num_elements, comparators,
-                          result_columns, num_queries);
+  if (query->context->is_single_core) {
+    batch_select_single_core((int *)source_column->data, num_elements, comparators,
+                             result_columns, num_queries);
+  } else {
+    batch_select_multi_core((int *)source_column->data, num_elements, comparators,
+                            result_columns, num_queries);
+  }
   // Clean up and set success message
   free(result_columns);
   vector_destroy(batch_queries);

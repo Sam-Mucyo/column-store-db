@@ -5,12 +5,11 @@
 
 #include "hash_table.h"
 
+// From distribution code
 // This code is designed to test the correctness of your implementation.
 // You do not need to significantly change it.
-// Compile and run it in the command line by typing:
-// make test; ./test
 
-int main(void) {
+int test_hashmap(void) {
   hashtable *ht = NULL;
   int num_tests = 20;
   int failure = allocate(&ht, num_tests);

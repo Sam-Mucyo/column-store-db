@@ -78,6 +78,9 @@ void handle_dbOperator(DbOperator *query, message *send_message) {
       log_client_perf(stdout, "\thandle_batched_queries: t = %.6fμs\n", get_time() - t0);
       set_batch_queries(query->context, 0);
     } break;
+    case JOIN:
+      exec_join(query, send_message);
+      break;
     default:
       cs165_log(stdout, "execute_DbOperator: Unknown query type\n");
       break;

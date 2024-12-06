@@ -33,6 +33,10 @@ void exec_aggr(DbOperator *query, message *send_message);
 // Executes an arithmetic operation
 void exec_arithmetic(DbOperator *query, message *send_message);
 
+// JOIN Operations
+//----------------
+void exec_join(DbOperator *query, message *send_message);
+
 // DELETE Operations
 //------------------
 
