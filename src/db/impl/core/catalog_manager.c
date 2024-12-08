@@ -53,7 +53,7 @@ Status deserialize_column(Column *col, Table *table, FILE *meta_file) {
 
   // Construct the path to the column's data file
   char col_path[MAX_PATH_LEN];
-  snprintf(col_path, MAX_PATH_LEN, "%s.%s.%s.bin", current_db->name, table->name,
+  snprintf(col_path, MAX_PATH_LEN, "disk/%s.%s.%s.bin", current_db->name, table->name,
            col->name);
 
   // Open the column data file

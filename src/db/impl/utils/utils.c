@@ -27,7 +27,7 @@
 #define LOG_SESSION_PERF 1
 
 // Get current time in microseconds
-double get_time() {
+double get_time(void) {
   struct timeval tv;
   gettimeofday(&tv, NULL);
   return tv.tv_sec * 1e6 + tv.tv_usec;
@@ -231,10 +231,10 @@ int *extend_and_update_mmap(int *mapped_addr, size_t *current_size, size_t offse
     // Round up to nearest page size for efficiency
     size_t page_size = sysconf(_SC_PAGESIZE);
     cs165_log(stdout, "extend_and_update_mmap: page size %zu\n", page_size);
-    size_t new_size = (required_size + page_size - 1) & ~(page_size - 1);
 
     // Remap with new size
 #ifdef __linux__
+    size_t new_size = (required_size + page_size - 1) & ~(page_size - 1);
     void *new_addr = mremap(mapped_addr, *current_size, new_size, MREMAP_MAYMOVE);
     if (new_addr == MAP_FAILED) {
       return NULL;

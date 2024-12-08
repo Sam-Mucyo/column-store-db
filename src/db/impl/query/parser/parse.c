@@ -112,9 +112,13 @@ DbOperator *parse_command(char *query_command, message *send_message, int client
     set_batch_queries(context, 1);
     send_message->status = OK_DONE;
   } else if (strncmp(query_command, "batch_execute", 13) == 0) {
+    if (!context->is_batch_queries_on) {
+      handle_error(send_message, "No batch queries to execute");
+      return NULL;
+    }
     // Create dbo of type batch_execute
     dbo = malloc(sizeof(DbOperator));
-    dbo->type = context->is_batch_queries_on ? EXEC_BATCH : UNKNOWN_COMMAND;
+    dbo->type = EXEC_BATCH;
     send_message->status = OK_DONE;
   } else if (strncmp(query_command, "single_core()", 12) == 0) {
     context->is_single_core = 1;

@@ -65,6 +65,16 @@ void exec_join(DbOperator *query, message *send_message) {
   }
 }
 
+/**
+ * @brief Execute a join operation using a nested loop join algorithm.
+ *
+ * @param psn1_col
+ * @param psn2_col
+ * @param vals1_col
+ * @param vals2_col
+ * @param resL
+ * @param resR
+ */
 void exec_nested_loop_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
                            Column *vals2_col, Column *resL, Column *resR) {
   log_debug("exec_nested_loop_join: executing nested loop join\n");
@@ -94,12 +104,6 @@ void exec_nested_loop_join(Column *psn1_col, Column *psn2_col, Column *vals1_col
   resL->num_elements = k;
   resR->num_elements = k;
   log_info("exec_nested_loop_join: done\n");
-}
-
-void exec_grace_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
-                          Column *vals2_col, Column *resL, Column *resR) {
-  log_debug("exec_grace_hash_join: Not implemented; using naive hash join\n");
-  exec_naive_hash_join(psn1_col, psn2_col, vals1_col, vals2_col, resL, resR);
 }
 
 void exec_naive_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
@@ -182,6 +186,12 @@ void exec_naive_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
   resR->num_elements = k;
 
   log_info("exec_hash_join: done. Produced %zu results\n", k);
+}
+
+void exec_grace_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
+                          Column *vals2_col, Column *resL, Column *resR) {
+  log_debug("exec_grace_hash_join: Not implemented; using naive hash join\n");
+  exec_naive_hash_join(psn1_col, psn2_col, vals1_col, vals2_col, resL, resR);
 }
 
 void exec_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,

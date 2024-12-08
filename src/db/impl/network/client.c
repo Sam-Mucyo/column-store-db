@@ -290,7 +290,13 @@ int send_column_data(int socket, const char *csv_filename) {
 
   // read data and calculate metadata
   fseek(file, 0, SEEK_SET);
-  getline(&line, &len, file);  // Skip header
+
+  // Skip header
+  if (getline(&line, &len, file) == -1) {
+    log_err("send_column_data: failed to read the csv header");
+    return -1;
+  }
+
   while ((read = getline(&line, &len, file)) != -1) {
     char *token = strtok(line, ",");
     for (int i = 0; i < num_columns; i++) {
