@@ -40,7 +40,7 @@ typedef struct Column {
   // Stat metrics
   long min_value;
   long max_value;
-  long sum;
+  int64_t sum;
 } Column;
 
 /**
