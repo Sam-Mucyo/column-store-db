@@ -162,7 +162,7 @@ def main():
 # ---------------------------- Helper Functions ------------------------------
 
 
-def run_piped_cmd(cmd, log_file_path, show_stdout=False):
+def run_piped_cmd(cmd, log_file_path, verbose=False):
     out, err = log_file_path + ".out", log_file_path + ".err"
 
     with open(out, "w", encoding="utf-8") as outfile, open(
@@ -172,8 +172,8 @@ def run_piped_cmd(cmd, log_file_path, show_stdout=False):
 
         report_cmd_msge(cmd, additonal_info)
 
-        if show_stdout:  # useful for development/debug to see real-time output
-            process = subprocess.Popen(cmd.split(), stderr=errfile)
+        if verbose:  # useful for development/debug to see real-time output
+            process = subprocess.Popen(cmd.split())
             process.wait()
 
         else:  # redirect stdout to file, mostly when running experiments
@@ -198,7 +198,7 @@ def build_pkg(pkg_path=DB_SRC_PATH, verbose=False):
         return False
 
     log_file_path = os.path.join(EXPERIMENTS_PATH, "compile.log")
-    process = run_piped_cmd("make", log_file_path, show_stdout=verbose)
+    process = run_piped_cmd("make", log_file_path, verbose=verbose)
 
     if process.returncode != 0:
         print(
@@ -222,7 +222,7 @@ def run_test_milestones(mile_no, verbose=False):
     print(f"Running tests for milestone up to {mile_no}")
     cmd = f"{TEST_MILESTONE_SCRIPT} {mile_no}"
     log_file_path = os.path.join(EXPERIMENTS_PATH, f"test_m{mile_no}.results")
-    process = run_piped_cmd(cmd, log_file_path, show_stdout=verbose)
+    process = run_piped_cmd(cmd, log_file_path, verbose=verbose)
 
     return process.returncode == 0
 
