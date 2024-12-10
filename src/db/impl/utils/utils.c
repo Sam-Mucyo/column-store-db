@@ -196,65 +196,6 @@ void handle_error(message *send_message, char *error_message) {
   send_message->length = strlen(send_message->payload);
 }
 
-/**
- * @brief Extends memory-mapped region if necessary and updates values
- *
- * This function will extend the mapped memory region if needed to accommodate
- * new values, but does not immediately sync changes to disk. The actual file
- * extension and disk synchronization should be handled separately.
- *
- * @param mapped_addr Pointer to the current memory-mapped region
- * @param current_size Pointer to current size of mapped region in bytes
- * @param offset Starting position (in number of integers) where new values will be
- * written
- * @param new_values Array of integer values to write
- * @param count Number of integers to write
- *
- * @return Pointer to (possibly new) mapped region on success, NULL on failure
- *         If successful, *current_size will be updated if extension occurred
- *
- * @note If extension occurs, the old mapped_addr may become invalid and the
- *       new returned pointer should be used instead
- */
-int *extend_and_update_mmap(int *mapped_addr, size_t *current_size, size_t offset,
-                            const int *new_values, size_t count) {
-  if (mapped_addr == NULL || current_size == NULL || new_values == NULL || count == 0) {
-    errno = EINVAL;
-    return NULL;
-  }
-
-  // Calculate required size
-  size_t required_size = (offset + count) * sizeof(int);
-
-  // Check if we need to extend
-  if (required_size > *current_size) {
-    // Round up to nearest page size for efficiency
-    size_t page_size = sysconf(_SC_PAGESIZE);
-    cs165_log(stdout, "extend_and_update_mmap: page size %zu\n", page_size);
-
-    // Remap with new size
-#ifdef __linux__
-    size_t new_size = (required_size + page_size - 1) & ~(page_size - 1);
-    void *new_addr = mremap(mapped_addr, *current_size, new_size, MREMAP_MAYMOVE);
-    if (new_addr == MAP_FAILED) {
-      return NULL;
-    }
-#elif __APPLE__
-    // macOS does not manually mmap a new region, so we need to create a new mapping
-    // and copy the old values over.
-    log_err(
-        "extend_and_update_mmap: macOS does not support mremap; support not implemented "
-        "yet\n");
-    return NULL;
-#endif
-  }
-
-  // Copy new values to the specified offset
-  memcpy(mapped_addr + offset, new_values, count * sizeof(int));
-
-  return mapped_addr;
-}
-
 // message send function, with error handling
 ssize_t send_message_safe(int socket, const void *buffer, size_t length) {
   size_t total_sent = 0;

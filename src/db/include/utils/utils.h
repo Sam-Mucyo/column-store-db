@@ -67,9 +67,6 @@ void log_info(const char *format, ...);
 
 void handle_error(message *send_message, char *error_message);
 
-int *extend_and_update_mmap(int *mapped_addr, size_t *current_size, size_t offset,
-                            const int *new_values, size_t count);
-
 ssize_t send_message_safe(int socket, const void *buffer, size_t length);
 ssize_t recv_message_safe(int socket, void *buffer, size_t length);
 
