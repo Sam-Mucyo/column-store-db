@@ -19,8 +19,8 @@ typedef struct ClientContext {
 
 extern ClientContext *g_client_context;
 
-void init_client_context();
-void free_client_context();
+void init_client_context(void);
+void free_client_context(void);
 int create_new_handle(const char *name, Column **out_column);
 Column *get_handle(const char *name);
 

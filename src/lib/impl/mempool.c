@@ -1,1 +1,1 @@
-void placeholder_mempool_c() {}
+void placeholder_mempool_c(void) {}

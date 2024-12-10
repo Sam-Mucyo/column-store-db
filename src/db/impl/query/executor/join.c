@@ -65,6 +65,16 @@ void exec_join(DbOperator *query, message *send_message) {
   }
 }
 
+/**
+ * @brief Execute a join operation using a nested loop join algorithm.
+ *
+ * @param psn1_col
+ * @param psn2_col
+ * @param vals1_col
+ * @param vals2_col
+ * @param resL
+ * @param resR
+ */
 void exec_nested_loop_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
                            Column *vals2_col, Column *resL, Column *resR) {
   log_debug("exec_nested_loop_join: executing nested loop join\n");
@@ -96,12 +106,6 @@ void exec_nested_loop_join(Column *psn1_col, Column *psn2_col, Column *vals1_col
   log_info("exec_nested_loop_join: done\n");
 }
 
-void exec_grace_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
-                          Column *vals2_col, Column *resL, Column *resR) {
-  log_debug("exec_grace_hash_join: Not implemented; using naive hash join\n");
-  exec_naive_hash_join(psn1_col, psn2_col, vals1_col, vals2_col, resL, resR);
-}
-
 void exec_naive_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
                           Column *vals2_col, Column *resL, Column *resR) {
   log_debug("exec_hash_join: executing hash join\n");
@@ -111,62 +115,60 @@ void exec_naive_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
 
   int *l_psn = (int *)psn1_col->data;
   int *r_psn = (int *)psn2_col->data;
-
   int *l_vals = (int *)vals1_col->data;
   int *r_vals = (int *)vals2_col->data;
 
-  // Allocate result arrays
-  size_t max_res_size = psn1_col->num_elements * psn2_col->num_elements;
-  resL->data = malloc(sizeof(int) * max_res_size);
-  resR->data = malloc(sizeof(int) * max_res_size);
-
-  if (!resL->data || !resR->data) {
-    log_err("exec_hash_join: failed to allocate result arrays\n");
-    return;
-  }
-
-  // Create hash table for the left relation
+  // First pass: Count matches to determine exact result size
   hashtable *ht = NULL;
   if (allocate(&ht, l_N) != 0) {
     log_err("exec_hash_join: failed to allocate hash table\n");
-    free(resL->data);
-    free(resR->data);
     return;
   }
 
-  // Insert all elements from the left relation
+  // Build phase: Insert all elements from left relation
   for (size_t i = 0; i < l_N; i++) {
     if (put(ht, l_vals[i], l_psn[i]) != 0) {
       log_err("exec_hash_join: failed to insert into hash table\n");
       deallocate(ht);
-      free(resL->data);
-      free(resR->data);
       return;
     }
   }
 
-  // Probe: Match with right relation
-  size_t k = 0;
-  int *matching_positions = malloc(sizeof(int) * l_N);  // Buffer for matching positions
+  // First probe phase: Count matches
+  size_t total_matches = 0;
+  int *matching_positions = malloc(sizeof(int) * l_N);
   int num_matches;
 
   if (!matching_positions) {
     log_err("exec_hash_join: failed to allocate matching positions buffer\n");
     deallocate(ht);
-    free(resL->data);
-    free(resR->data);
     return;
   }
 
   for (size_t j = 0; j < r_N; j++) {
-    // Get all matching positions from hash table
     if (get(ht, r_vals[j], matching_positions, l_N, &num_matches) == 0) {
-      // For each match, add to result
+      total_matches += num_matches;
+    }
+  }
+
+  // Allocate exact space needed
+  resL->data = malloc(sizeof(int) * total_matches);
+  resR->data = malloc(sizeof(int) * total_matches);
+
+  if (!resL->data || !resR->data) {
+    log_err("exec_hash_join: failed to allocate result arrays\n");
+    free(matching_positions);
+    deallocate(ht);
+    if (resL->data) free(resL->data);
+    if (resR->data) free(resR->data);
+    return;
+  }
+
+  // Second probe phase: Fill results
+  size_t k = 0;
+  for (size_t j = 0; j < r_N; j++) {
+    if (get(ht, r_vals[j], matching_positions, l_N, &num_matches) == 0) {
       for (int m = 0; m < num_matches; m++) {
-        if (k >= max_res_size) {
-          log_err("exec_hash_join: result buffer overflow\n");
-          break;
-        }
         ((int *)resL->data)[k] = matching_positions[m];
         ((int *)resR->data)[k] = r_psn[j];
         k++;
@@ -182,6 +184,12 @@ void exec_naive_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
   resR->num_elements = k;
 
   log_info("exec_hash_join: done. Produced %zu results\n", k);
+}
+
+void exec_grace_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,
+                          Column *vals2_col, Column *resL, Column *resR) {
+  log_debug("exec_grace_hash_join: Not implemented; using naive hash join\n");
+  exec_naive_hash_join(psn1_col, psn2_col, vals1_col, vals2_col, resL, resR);
 }
 
 void exec_hash_join(Column *psn1_col, Column *psn2_col, Column *vals1_col,

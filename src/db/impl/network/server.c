@@ -250,7 +250,7 @@ int receive_columns(int socket, message *send_message) {
 
     // Construct file path
     char file_path[MAX_PATH_LEN];
-    snprintf(file_path, MAX_PATH_LEN, "%s.bin", metadata.name);
+    snprintf(file_path, MAX_PATH_LEN, "disk/%s.bin", metadata.name);
 
     // Open file
     col->disk_fd = open(file_path, O_RDWR | O_CREAT | O_TRUNC, 0644);
@@ -328,7 +328,7 @@ int receive_columns(int socket, message *send_message) {
   create_idx_on(primary_col, send_message);
   // TODO: debug why this messes up correctness on grading server. particularly,
   // Benchmark3
-  //   cluster_idx_on(table, primary_col, send_message);
+  cluster_idx_on(table, primary_col, send_message);
 
   if (secondary_col) create_idx_on(secondary_col, send_message);
 

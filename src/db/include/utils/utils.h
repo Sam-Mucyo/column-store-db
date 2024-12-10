@@ -52,11 +52,9 @@ void cs165_log(FILE *out, const char *format, ...);
 //
 // Usage: log_err("%s: error at line: %d", __func__, __LINE__);
 void log_err(const char *format, ...);
+void log_debug(const char *format, ...);
 void log_perf(const char *format, ...);
 void log_client_perf(FILE *out, const char *format, ...);
-
-// Get current time in microseconds
-double get_time();
 
 // log_info(format, ...)
 // Writes the string from @format to stdout, extendable for
@@ -69,10 +67,10 @@ void log_info(const char *format, ...);
 
 void handle_error(message *send_message, char *error_message);
 
-int *extend_and_update_mmap(int *mapped_addr, size_t *current_size, size_t offset,
-                            const int *new_values, size_t count);
-
 ssize_t send_message_safe(int socket, const void *buffer, size_t length);
 ssize_t recv_message_safe(int socket, void *buffer, size_t length);
+
+// Get current time in microseconds
+double get_time(void);
 
 #endif /* __UTILS_H__ */

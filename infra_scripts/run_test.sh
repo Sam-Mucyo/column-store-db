@@ -10,15 +10,22 @@
 #     runs the corresponding generated test DSLs
 #    and checks the output against corresponding EXP file.
 
+# Set base directory based on the location of this script, to all this script to work in both local and container
+# environments. As long as this script is in `infra_scripts` directory, this will point to the project root directory.
+BASE_DIR=$(dirname $(dirname $(realpath $0)))
+
 test_id=$1
-output_dir=${2:-'/cs165/infra_outputs'}
+INPUT_DIR=${2:-$BASE_DIR/staff_test}
+OUTPUT_DIR=${3:-$BASE_DIR/infra_outputs}
 
 echo "Running test # $test_id"
+echo "Input <.dsl> directory: $INPUT_DIR"
+echo "Output directory: $OUTPUT_DIR"
 
-cd /cs165/src
+cd $BASE_DIR/src
 # collect the client output for this test case by test_id
 start=`date +%s%N`
-./client < /cs165/staff_test/test${test_id}gen.dsl 2> ${output_dir}/test${test_id}gen.out.err 1> ${output_dir}/test${test_id}gen.out
+./client < $INPUT_DIR/test${test_id}gen.dsl 2> ${OUTPUT_DIR}/test${test_id}gen.out.err 1> ${OUTPUT_DIR}/test${test_id}gen.out
 end=`date +%s%N`
 echo Execution time was `expr $end - $start` nanoseconds.
 
@@ -150,6 +157,6 @@ then
     echo $prev_time > tmp.prev_time
 fi
 
-cd /cs165
+cd $BASE_DIR
 # run the "comparison" script for comparing against expected output for test_id
-./infra_scripts/verify_output_standalone.sh $test_id ${output_dir}/test${test_id}gen.out /cs165/staff_test/test${test_id}gen.exp ${output_dir}/test${test_id}gen.cleaned.out ${output_dir}/test${test_id}gen.cleaned.sorted.out
+./infra_scripts/verify_output_standalone.sh $test_id ${OUTPUT_DIR}/test${test_id}gen.out $INPUT_DIR/test${test_id}gen.exp ${OUTPUT_DIR}/test${test_id}gen.cleaned.out ${OUTPUT_DIR}/test${test_id}gen.cleaned.sorted.out
