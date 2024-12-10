@@ -11,6 +11,8 @@ infra_outputs
 staff_test
 student_outputs
 generated_data
+experiments/data
+experiments/results
 
 # Docs
 html/
