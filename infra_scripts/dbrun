@@ -38,6 +38,11 @@ from utils import (
 
 # --------------------- Constants & Parameters -------------------------------
 DEFAULT_SEED = 42
+
+M1_NUM_TRIALS = 5
+M2_NUM_TRIALS = 5
+M3_NUM_TRIALS = 5
+
 IS_IN_DOCKER = os.path.exists("/.dockerenv")
 BASE_DIR = (
     os.path.expanduser("~/workspace/h/classes/cs165/mainproj/code/proj/")
@@ -56,6 +61,9 @@ INFRA_SCRIPTS_PATH = os.path.expanduser(f"{BASE_DIR}infra_scripts/")
 # Binary paths
 SERVER_BINARY = os.path.expanduser(f"{DB_SRC_PATH}server")
 CLIENT_BINARY = os.path.expanduser(f"{DB_SRC_PATH}client")
+TEST_MILESTONE_SCRIPT = os.path.expanduser(f"{INFRA_SCRIPTS_PATH}test_milestone.sh")
+RUN_TEST_SCRIPT = os.path.expanduser(f"{INFRA_SCRIPTS_PATH}run_test.sh")
+RUN_EXPERIMENTS_SCRIPT = os.path.expanduser(f"{INFRA_SCRIPTS_PATH}run_experiment.sh")
 
 GEN_DATA_SCRIPT = os.path.expanduser(
     f"{BASE_DIR}project_tests/data_generation_scripts/"
@@ -65,7 +73,6 @@ GEN_M2_DATA_PY = os.path.expanduser(f"{GEN_DATA_SCRIPT}milestone2.py")
 GEN_M3_DATA_PY = os.path.expanduser(f"{GEN_DATA_SCRIPT}milestone3.py")
 GEN_M4_DATA_PY = os.path.expanduser(f"{GEN_DATA_SCRIPT}milestone4.py")
 
-TEST_MILESTONE_SCRIPT = os.path.expanduser(f"{INFRA_SCRIPTS_PATH}test_milestone.sh")
 
 # File extensions and patterns
 DSL_EXTENSION = ".dsl"
@@ -88,10 +95,10 @@ M4_QUERIES_PATH = os.path.expanduser(f"{EXPERIMENTS_PATH}data/milestone4/")
 
 
 # Final parsed data and results paths
-PARSED_M1_RESULTS_PATH = f"{BASE_DIR}/experiments/results/milestone1/"
-PARSED_M2_RESULTS_PATH = f"{BASE_DIR}/experiments/results/milestone2/"
-PARSED_M3_RESULTS_PATH = f"{BASE_DIR}/experiments/results/milestone3/"
-PARSED_M4_RESULTS_PATH = f"{BASE_DIR}/experiments/results/milestone4/"
+PARSED_M1_RESULTS_PATH = f"{BASE_DIR}experiments/results/milestone1/"
+PARSED_M2_RESULTS_PATH = f"{BASE_DIR}experiments/results/milestone2/"
+PARSED_M3_RESULTS_PATH = f"{BASE_DIR}experiments/results/milestone3/"
+PARSED_M4_RESULTS_PATH = f"{BASE_DIR}experiments/results/milestone4/"
 
 # if final results paths do not exist, create them
 for path in [
@@ -155,7 +162,7 @@ def main():
         # Needed to ensure necessary data are generated before running
         # experiments no need to do this if tests were run before, but if not,
         #  we need to generate data first (also ensure correctness)
-        run_test_milestones(args.mile_no, verbose=False)
+        # run_test_milestones(args.mile_no, verbose=False)
         run_milestone_experiment(args.mile_no)
 
 
@@ -168,11 +175,10 @@ def run_piped_cmd(cmd, log_file_path, verbose=False):
     with open(out, "w", encoding="utf-8") as outfile, open(
         err, "w", encoding="utf-8"
     ) as errfile:
-        additonal_info = {"stdout": out, "stderr": err}
-
-        report_cmd_msge(cmd, additonal_info)
-
         if verbose:  # useful for development/debug to see real-time output
+            additonal_info = {"stdout": out, "stderr": err}
+            report_cmd_msge(cmd, additonal_info)
+
             process = subprocess.Popen(cmd.split())
             process.wait()
 
@@ -231,11 +237,11 @@ def run_milestone_experiment(mile_no):
     if mile_no == "1":
         # Probably no need to run multiple trials,
         # m1 have about 10 select queries in each data size/run
-        run_m1_experiment(n_trials=5)
-    # elif mile_no == "2":
-    #     run_m2_experiment()
-    # elif mile_no == "3":
-    #     run_m3_experiment()
+        run_m1_experiments(n_trials=M1_NUM_TRIALS)
+    elif mile_no == "2":
+        run_m2_experiments(n_trials=M2_NUM_TRIALS)
+    elif mile_no == "3":
+        run_m3_experiment(n_trials=M3_NUM_TRIALS)
     # elif mile_no == "4":
     #     run_m4_experiment()
     else:
@@ -269,7 +275,7 @@ def generate_data(mile_no, n, seed, data_dir, kwargs):
     run_piped_cmd(cmd, os.path.join(data_dir, f"gen_data_n={n}.log"))
 
 
-def run_m1_experiment(n_trials=10):
+def run_m1_experiments(n_trials=10):
     """
     Run milestone 1 experiments for different data sizes.
 
@@ -306,8 +312,10 @@ def run_m1_experiment(n_trials=10):
     print(
         f"{Colors.BOLD}Running Milestone 1 Experiments, n_trials={n_trials}...{Colors.ENDC}"
     )
+    try_removing_old_results(PARSED_M1_RESULTS_PATH)
+
     # run `./test_milestone.sh 01 5 1 <datasize` command
-    delay = 5  # server's start up delay
+    delay = 2  # server's start up delay
     mile = 1
 
     for data_size in os.listdir(M1_QUERIES_PATH):
@@ -334,6 +342,140 @@ def run_m1_experiment(n_trials=10):
                 f"{Colors.GREEN}Parsed logs can be found in {parsed_file}{Colors.ENDC}"
             )
     print(f"{Colors.GREEN}All milestone 1 experiments completed{Colors.ENDC}")
+
+
+def run_m2_experiments(n_trials=10):
+    """
+    Runs milestone 2's performance tests (16,..., 19) with varying batch size
+
+    cmd: RUN_TEST_SCRIPT $TEST_ID $INPUT_DIR $OUTPUT_DIR
+
+    Pre-calling:
+    This should be run after having generated data for experiment by running
+    GEN_M2_DATA_PY in "experiment" mode. That should have generated data in the
+    M2_QUERIES_PATH with the below directory structure:
+
+    .
+    ├── batch_size_1
+    │   ├── test16gen.dsl
+    │   ├── test16gen.exp
+    │   ├── test17gen.dsl
+    │   ├── test17gen.exp
+    │   ├── test18gen.dsl
+    │   ├── test18gen.exp
+    │   ├── test19gen.dsl
+    │   └── test19gen.exp
+    ├── batch_size_128
+    │   ├── test16gen.dsl
+    │   ├── test16gen.exp
+    │   ├── test17gen.dsl
+
+    """
+    print(f"{Colors.BOLD}M2 Experiments, n_trials={n_trials}{Colors.ENDC}")
+
+    try_removing_old_results(PARSED_M2_RESULTS_PATH)
+
+    for dir in os.listdir(M2_QUERIES_PATH):
+        batch_size = int(dir.split("_")[-1])
+        curr_path = M2_QUERIES_PATH + dir
+
+        for run in range(1, n_trials + 1):
+            print(f"batch_size={batch_size}, run={run}")
+
+            # Example: ./run_experiment.sh 2 16
+            cmd = f"{RUN_EXPERIMENTS_SCRIPT} 2 {batch_size}"
+            log_file_path = os.path.join(curr_path, f"run={run}.log")
+            report_cmd_msge(cmd, {"stdout": log_file_path + ".out"})
+
+            process = run_piped_cmd(cmd, log_file_path, verbose=True)
+
+            if process.returncode != 0:
+                print(
+                    f"{Colors.RED} ❌ Experiment returned non-zero exit code:"
+                    f"{process.returncode}{Colors.ENDC}"
+                )
+                return False
+
+            print(f"parsing logs for batch_size={batch_size}, run={run}")
+            time.sleep(1)
+
+            parsed_file = (
+                PARSED_M2_RESULTS_PATH + f"batch_size={batch_size}run={run}.csv"
+            )
+            collect_runtimes_from_client_logs(curr_path, parsed_file, milestone=2)
+            print(
+                f"{Colors.GREEN}Parsed logs can be found in {parsed_file}{Colors.ENDC}"
+            )
+    print(f"{Colors.GREEN}All milestone 2 experiments completed{Colors.ENDC}")
+
+
+def run_m3_experiment(n_trials=10):
+    """
+    Run milestone 3's performance tests (33, ..., 44) with varying data sizes
+
+    cmd: RUN_TEST_SCRIPT $TEST_ID $INPUT_DIR $OUTPUT_DIR
+
+    Assummes M3_QUERIES_PATH has the following structure:
+    .
+    ├── test33gen.dsl
+    ├── test33gen.exp
+    ├── ...
+    ├── ...
+    ├── test44gen.dsl
+    └── test44gen.exp
+
+    This function will just run these tests `n_trials` times and parse the logs
+    putting the results in the PARSED_M3_RESULTS_PATH directory.
+    """
+    print(f"{Colors.BOLD}M3 Experiments, n_trials={n_trials}{Colors.ENDC}")
+    try_removing_old_results(PARSED_M3_RESULTS_PATH)
+
+    for run in range(1, n_trials + 1):
+        print(f"run={run}")
+
+        # (currently 42 is a placeholder for future parameters we might need)
+        # Example: ./run_experiment.sh 3 42
+        cmd = f"{RUN_EXPERIMENTS_SCRIPT} 3 42"
+        log_file_path = os.path.join(M3_QUERIES_PATH, f"run={run}.log")
+        report_cmd_msge(cmd, {"stdout": log_file_path + ".out"})
+
+        process = run_piped_cmd(cmd, log_file_path, verbose=True)
+
+        if process.returncode != 0:
+            print(
+                f"{Colors.RED} ❌ Experiment returned non-zero exit code:"
+                f"{process.returncode}{Colors.ENDC}"
+            )
+            return False
+
+        print(f"parsing logs for M3 experiments, run={run}")
+        time.sleep(1)
+
+        parsed_file = PARSED_M3_RESULTS_PATH + f"m3-run={run}.csv"
+        collect_runtimes_from_client_logs(M3_QUERIES_PATH, parsed_file, milestone=3)
+        print(f"{Colors.GREEN}Parsed logs can be found in {parsed_file}{Colors.ENDC}")
+    print(f"{Colors.GREEN}All milestone 3 experiments completed{Colors.ENDC}")
+
+
+def try_removing_old_results(results_path):
+    if os.path.exists(results_path) and os.listdir(results_path):
+        ans = input(
+            f"{Colors.YELLOW}Do you want to remove all old results in {results_path}? [y/n]: {Colors.ENDC}"
+        )
+        if ans.lower() == "y":
+            os.system(f"rm -rf {results_path}/*")
+        else:
+            print(f"Keeping old results in {results_path}")
+
+
+def check_server_running():
+    """Check if server process is running by looking for its process"""
+    try:
+        output = subprocess.check_output(["ps", "aux"], text=True)
+        server_processes = [line for line in output.split("\n") if "server" in line]
+        return len(server_processes) >= 1
+    except subprocess.SubProcessError:
+        return False
 
 
 if __name__ == "__main__":

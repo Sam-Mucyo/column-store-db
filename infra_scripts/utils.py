@@ -15,18 +15,18 @@ def parse_runtime_data(filepath):
 
         # Find all query patterns
         query_patterns = re.finditer(
-            r"--Query: ([^=\n]+)=([^\n]+)\n--\s*t = ([0-9.]+)μs", content
+            r"--Query: ([^\n]+)\n--\s*t = ([0-9.]+)μs", content
         )
 
         for match in query_patterns:
-            operation = match.group(2).split("(")[0]  # Extract operation name
-            runtime = float(match.group(3))
+            operation = match.group(1).split("(")[0]  # Extract operation name
+            runtime = float(match.group(2))
             data.append({"operation": operation, "runtime": runtime})
 
     return data
 
 
-def collect_runtimes_from_client_logs(results_path, destination_file_path):
+def collect_runtimes_from_client_logs(results_path, destination_file_path, milestone=1):
     """Recursively parse client logs and extract query runtime information.
 
     Args:
@@ -35,19 +35,37 @@ def collect_runtimes_from_client_logs(results_path, destination_file_path):
     """
 
     all_data = []
-
+    print(
+        f"Collecting runtime data from: {results_path}; Saving to: {destination_file_path}"
+    )
     # Walk through directory structure
     for dirpath, dirnames, filenames in os.walk(results_path):
         # Get data size from directory name
-        data_size = os.path.basename(dirpath)
-        if not data_size.isdigit():
-            continue
+        param = os.path.basename(dirpath)
+        param_name, value = None, None
+
+        # in m1, param is a number
+        if milestone == 1:
+            if not param.isdigit():
+                continue
+            param_name = "data_size"
+            value = int(param)
+
+        # In m2, param is a string of format "batch_size_<batch_size>"
+        if milestone == 2:
+            if not param.startswith("batch_size"):
+                continue
+            param_name = "batch_size"
+            value = int(param.split("_")[-1])
+
+        print(f"Processing: {dirpath} for milestone {milestone}")
 
         # Process each test output file
         for filename in filenames:
             if filename.endswith("gen.out"):
                 # Extract test number
                 test_num = re.search(r"test(\d+)gen", filename)
+                print(f"Processing: {filename}")
                 if test_num:
                     test_num = test_num.group(1)
 
@@ -56,9 +74,7 @@ def collect_runtimes_from_client_logs(results_path, destination_file_path):
 
                     # Add metadata to each operation entry
                     for entry in runtime_data:
-                        entry.update(
-                            {"data_size": int(data_size), "test_number": int(test_num)}
-                        )
+                        entry.update({param_name: value, "test_number": int(test_num)})
 
                     all_data.extend(runtime_data)
     df = pd.DataFrame(all_data)

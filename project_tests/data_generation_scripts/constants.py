@@ -1,6 +1,6 @@
 import os
 
-IN_EXPERIMENTATION = False
+IN_EXPERIMENTATION = True
 
 
 IS_IN_DOCKER = os.path.exists("/.dockerenv")
@@ -10,4 +10,4 @@ BASE_DIR = (
     else "/cs165/"
 )
 
-EXPERIMENT_BASE_DATA_DIR = f"{BASE_DIR}/experiments/data/"
+EXPERIMENT_BASE_DATA_DIR = f"{BASE_DIR}experiments/data/"

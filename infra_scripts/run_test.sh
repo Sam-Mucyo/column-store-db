@@ -1,3 +1,5 @@
+#!/bin/bash
+
 # Test Convenience Script
 # CS 165
 # Contact: Wilson Qin
