@@ -40,6 +40,10 @@ int batch_select_single_core(const int *data, size_t num_elements,
 int batch_select_multi_core(const int *data, size_t num_elements,
                             Comparator **comparators, Column **result_columns,
                             size_t num_queries);
+
+void double_probe_select(Column *column, Comparator *comparator, Column *result,
+                         message *send_message);
+
 /**
  * @brief exec_select
  * Executes a select query and returns the status of the query.
@@ -79,8 +83,6 @@ void exec_select(DbOperator *query, message *send_message) {
     send_message->payload = NULL;
     return;
   }
-  int has_low_and_high =
-      comparator->type1 == GREATER_THAN_OR_EQUAL && comparator->type2 == LESS_THAN;
 
   cs165_log(stdout, "exec_select: Starting to scan\n");
 
@@ -91,41 +93,23 @@ void exec_select(DbOperator *query, message *send_message) {
 
   if (column->index && column->index->idx_type != NONE && !comparator->ref_posns) {
     //   Milestone 3: Index-based selection
+    // double_probe_select(column, comparator, result, send_message);
+    // return;
+
     // Get offset: where to start scanning based on the low value
-    if (comparator->p_high - 1 < column->min_value ||
-        comparator->p_low > column->max_value) {
-      //   if p_high is less than the min value, then no need to scan
-      result->num_elements = 0;
-      log_info("exec_select: No elements qualify the selection criteria\n");
-      send_message->status = OK_DONE;
-      send_message->payload = "Done";
-      send_message->length = strlen(send_message->payload);
-      return;
-    }
-
-    if (has_low_and_high) {
+    if (comparator->type1 == GREATER_THAN_OR_EQUAL &&
+        comparator->p_low >= column->min_value) {
       // since low of query > min_value idx must be found
-      size_t start_idx = comparator->p_low <= column->min_value
-                             ? 0
-                             : idx_lookup_left(column, comparator->p_low);
-      size_t end_idx = comparator->p_high >= column->max_value
-                           ? n_elts - 1
-                           : idx_lookup_right(column, comparator->p_high - 1);
-      result->num_elements = end_idx - start_idx + 1;
-      result->data = malloc(sizeof(int) * result->num_elements);
-      memcpy(result->data, column->index->positions + start_idx,
-             sizeof(int) * result->num_elements);
-      log_info("p_low: %ld, p_high: %ld\n", comparator->p_low, comparator->p_high);
-      log_info("idx suggests l,r where sorted_data[%ld] = %d, sorted_data[%ld] = %d\n",
-               start_idx, column->index->sorted_data[start_idx], end_idx,
-               column->index->sorted_data[end_idx]);
-
-      //   log_info(
-      //       "exec_select: used index to get starting position: %ld\nwhere "
-      //       "sorted_data[%ld] = %d\n",
-      //       start_idx, start_idx, column->index->sorted_data[start_idx]);
+      size_t start_idx = idx_lookup_left(column, comparator->p_low);
+      n_elts = column->num_elements - start_idx;
+      data = column->index->sorted_data + start_idx;
+      using_temp_ref_posns = 1;
+      comparator->ref_posns = column->index->positions + start_idx;
+      comparator->on_sorted_data = 1;
     }
-  } else if (n_elts < NUM_ELEMENTS_TO_MULTITHREAD || query->context->is_single_core) {
+  }
+
+  if (n_elts < NUM_ELEMENTS_TO_MULTITHREAD || query->context->is_single_core) {
     //   Milestone 1 : Single - core selection: to avoid the overhead of creating
     //   threads
     result->num_elements =
@@ -455,4 +439,44 @@ int batch_select_multi_core(const int *data, size_t num_elements,
   }
 
   return 0;
+}
+
+// Function to perform double-probe selection
+void double_probe_select(Column *column, Comparator *comparator, Column *result,
+                         message *send_message) {
+  // Get offset: where to start scanning based on the low value
+  if (comparator->p_high - 1 < column->min_value ||
+      comparator->p_low > column->max_value) {
+    //   if p_high is less than the min value, then no need to scan
+    result->num_elements = 0;
+    log_info("exec_select: No elements qualify the selection criteria\n");
+    send_message->status = OK_DONE;
+    send_message->payload = "Done";
+    send_message->length = strlen(send_message->payload);
+    return;
+  }
+
+  int has_low_and_high =
+      comparator->type1 == GREATER_THAN_OR_EQUAL && comparator->type2 == LESS_THAN;
+  if (has_low_and_high) {
+    // since low of query > min_value idx must be found
+    size_t start_idx = comparator->p_low <= column->min_value
+                           ? 0
+                           : idx_lookup_left(column, comparator->p_low);
+    size_t end_idx = comparator->p_high >= column->max_value
+                         ? column->num_elements - 1
+                         : idx_lookup_right(column, comparator->p_high - 1);
+    result->num_elements = end_idx - start_idx + 1;
+    result->data = malloc(sizeof(int) * result->num_elements);
+    memcpy(result->data, column->index->positions + start_idx,
+           sizeof(int) * result->num_elements);
+    log_info("p_low: %ld, p_high: %ld\n", comparator->p_low, comparator->p_high);
+    log_info("idx suggests l,r where sorted_data[%ld] = %d, sorted_data[%ld] = %d\n",
+             start_idx, column->index->sorted_data[start_idx], end_idx,
+             column->index->sorted_data[end_idx]);
+  }
+
+  send_message->status = OK_DONE;
+  send_message->payload = "Done";
+  send_message->length = strlen(send_message->payload);
 }
