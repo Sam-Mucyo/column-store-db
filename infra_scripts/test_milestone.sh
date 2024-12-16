@@ -18,7 +18,7 @@ UPTOMILE="${1:-5}"
 # Note: if you see segfaults when running this test suite for the test cases which expect a fresh server restart,
 # this may be because you are not waiting long enough between client tests.
 # Once you know how long your server takes, you can cut this time down - and provide it on your cmdline
-WAIT_SECONDS_TO_RECOVER_DATA="${2:-5}"
+WAIT_SECONDS_TO_RECOVER_DATA="${2:-7}"
 
 # Set base directory based on the location of this script, to all this script to work in both local and container
 # environments. As long as this script is in `infra_scripts` directory, this will point to the project root directory.
@@ -88,9 +88,10 @@ do
             # start the server before the first case we test.
             ./server > last_server.out &
             FIRST_SERVER_START=1
-        elif [ ${TEST_ID} -eq 2 ] || [ ${TEST_ID} -eq 5 ] || [ ${TEST_ID} -eq 11 ] || [ ${TEST_ID} -eq 21 ] || [ ${TEST_ID} -eq 22 ] || [ ${TEST_ID} -eq 31 ] || [ ${TEST_ID} -eq 46 ] || [ ${TEST_ID} -eq 62 ]
+        elif [ $RUN_M1_EXPERIMENT -eq 1 ] || [ ${TEST_ID} -eq 2 ] || [ ${TEST_ID} -eq 5 ] || [ ${TEST_ID} -eq 11 ] || [ ${TEST_ID} -eq 21 ] || [ ${TEST_ID} -eq 22 ] || [ ${TEST_ID} -eq 31 ] || [ ${TEST_ID} -eq 46 ] || [ ${TEST_ID} -eq 62 ]
         then
             # We restart the server after test 1,4,10,20,21,30,33 (before 2,3,11,12,19,20,31,33), as expected.
+            # Also, restart when running M1 Experiment so that all first select queries are run on fresh server.
 
             killserver
 

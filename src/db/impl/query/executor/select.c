@@ -1,5 +1,6 @@
 #include <pthread.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -13,6 +14,9 @@
 #include "query_exec.h"
 #include "utils.h"
 #include "vector.h"
+
+#define BLOCK_SIZE 1024       // TODO: adjust based on L1 cache size
+#define TEMP_BUFFER_SIZE 256  // Size for temporary results
 
 // Define a structure to hold thread-specific results for each query
 typedef struct {
@@ -37,6 +41,9 @@ size_t select_values_singlecore(const int *data, size_t num_elements,
 int batch_select_single_core(const int *data, size_t num_elements,
                              Comparator **comparators, Column **result_columns,
                              size_t num_queries);
+int batch_select_single_core_optimized(const int *data, size_t num_elements,
+                                       Comparator **comparators, Column **result_columns,
+                                       size_t num_queries);
 int batch_select_multi_core(const int *data, size_t num_elements,
                             Comparator **comparators, Column **result_columns,
                             size_t num_queries);
@@ -290,32 +297,35 @@ size_t select_values_singlecore(const int *data, size_t num_elements,
 int batch_select_single_core(const int *data, size_t num_elements,
                              Comparator **comparators, Column **result_columns,
                              size_t num_queries) {
-  if (!data || !comparators || !result_columns) {
-    log_err("batch_select_with_one_pass: Invalid input\n");
-    return -1;
-  }
-  // Single pass through the data
-  for (size_t i = 0; i < num_elements; i++) {
-    int current_value = data[i];
+  //   if (!data || !comparators || !result_columns) {
+  //     log_err("batch_select_with_one_pass: Invalid input\n");
+  //     return -1;
+  //   }
+  //   // Single pass through the data
+  //   for (size_t i = 0; i < num_elements; i++) {
+  //     int current_value = data[i];
 
-    // Check against each query's comparator
-    for (size_t q = 0; q < num_queries; q++) {
-      Comparator *comparator = comparators[q];
+  //     // Check against each query's comparator
+  //     for (size_t q = 0; q < num_queries; q++) {
+  //       Comparator *comparator = comparators[q];
 
-      if (should_include(current_value, comparator)) {
-        int *result_data = (int *)result_columns[q]->data;
-        size_t curr_idx = result_columns[q]->num_elements;
+  //       if (should_include(current_value, comparator)) {
+  //         int *result_data = (int *)result_columns[q]->data;
+  //         size_t curr_idx = result_columns[q]->num_elements;
 
-        // Store either the reference position or the current index
-        result_data[curr_idx] =
-            comparator->ref_posns ? (size_t)comparator->ref_posns[i] : i;
+  //         // Store either the reference position or the current index
+  //         result_data[curr_idx] =
+  //             comparator->ref_posns ? (size_t)comparator->ref_posns[i] : i;
 
-        result_columns[q]->num_elements++;
-      }
-    }
-  }
+  //         result_columns[q]->num_elements++;
+  //       }
+  //     }
+  //   }
+  //   return 0;
 
-  return 0;
+  // use optimized version
+  return batch_select_single_core_optimized(data, num_elements, comparators,
+                                            result_columns, num_queries);
 }
 
 // Worker function for each thread
@@ -479,4 +489,96 @@ void double_probe_select(Column *column, Comparator *comparator, Column *result,
   send_message->status = OK_DONE;
   send_message->payload = "Done";
   send_message->length = strlen(send_message->payload);
+}
+
+// Bitmap to track matches for each query
+typedef struct {
+  uint64_t bits[BLOCK_SIZE / 64];
+} QueryBitmap;
+
+static inline void clear_bitmap(QueryBitmap *bitmap) {
+  memset(bitmap->bits, 0, sizeof(bitmap->bits));
+}
+
+// Efficiently mark matches in bitmap
+static inline void mark_matches_bitmap(const int *block_data, size_t block_size,
+                                       Comparator *comparator, QueryBitmap *bitmap) {
+  for (size_t i = 0; i < block_size; i++) {
+    int current_value = block_data[i];
+    if (should_include(current_value, comparator)) {
+      bitmap->bits[i / 64] |= (1ULL << (i % 64));
+    }
+  }
+}
+
+// Process matches using bitmap to reduce branching
+static void process_matches(const size_t block_size, size_t base_idx,
+                            const QueryBitmap *bitmap, const int *ref_posns,
+                            int *result_data, size_t *result_count) {
+  size_t temp_buffer[TEMP_BUFFER_SIZE];
+  size_t temp_count = 0;
+
+  // Process 64 bits at a time
+  for (size_t i = 0; i < block_size / 64; i++) {
+    uint64_t mask = bitmap->bits[i];
+    while (mask) {
+      // Find next set bit
+      unsigned int bit_pos = __builtin_ctzll(mask);
+      size_t idx = i * 64 + bit_pos;
+
+      // Store in temporary buffer
+      temp_buffer[temp_count++] =
+          ref_posns ? (int)ref_posns[base_idx + idx] : (int)(base_idx + idx);
+
+      // Clear processed bit
+      mask &= mask - 1;
+
+      // Flush temporary buffer if full
+      if (temp_count == TEMP_BUFFER_SIZE) {
+        memcpy(&result_data[*result_count], temp_buffer, temp_count * sizeof(int));
+        *result_count += temp_count;
+        temp_count = 0;
+      }
+    }
+  }
+
+  // Flush remaining results
+  if (temp_count > 0) {
+    memcpy(&result_data[*result_count], temp_buffer, temp_count * sizeof(int));
+    *result_count += temp_count;
+  }
+}
+
+int batch_select_single_core_optimized(const int *data, size_t num_elements,
+                                       Comparator **comparators, Column **result_columns,
+                                       size_t num_queries) {
+  if (!data || !comparators || !result_columns) {
+    return -1;
+  }
+
+  QueryBitmap *query_bitmaps = malloc(num_queries * sizeof(QueryBitmap));
+  if (!query_bitmaps) return -1;
+
+  // Process data in blocks
+  for (size_t base_idx = 0; base_idx < num_elements; base_idx += BLOCK_SIZE) {
+    size_t block_size =
+        (num_elements - base_idx) < BLOCK_SIZE ? (num_elements - base_idx) : BLOCK_SIZE;
+    const int *block_data = &data[base_idx];
+
+    // First pass: Build bitmaps for all queries
+    for (size_t q = 0; q < num_queries; q++) {
+      clear_bitmap(&query_bitmaps[q]);
+      mark_matches_bitmap(block_data, block_size, comparators[q], &query_bitmaps[q]);
+    }
+
+    // Second pass: Process matches for each query
+    for (size_t q = 0; q < num_queries; q++) {
+      int *result_data = (int *)result_columns[q]->data;
+      process_matches(block_size, base_idx, &query_bitmaps[q], comparators[q]->ref_posns,
+                      result_data, &result_columns[q]->num_elements);
+    }
+  }
+
+  free(query_bitmaps);
+  return 0;
 }

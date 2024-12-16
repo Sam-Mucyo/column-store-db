@@ -14,6 +14,13 @@ import math
 
 from constants import IN_EXPERIMENTATION, EXPERIMENT_BASE_DATA_DIR
 
+# For Experimentation Parameters
+DATA_SIZES = [2**i for i in range(15, 26)]
+
+# We use test 2, which normally does 2 queries, so this will actually do
+# 2*N_QUERIES queries
+N_QUERIES = 2
+
 # note this is the base path where we store the data files we generate
 TEST_BASE_DIR = "/cs165/generated_data"
 EXPERIMENT_BASE_DIR = EXPERIMENT_BASE_DATA_DIR + "milestone1"
@@ -34,11 +41,11 @@ PLACES_TO_ROUND = 2
 ############################################################################
 
 
-def generateDataFileMidwayCheckin():
+def generateDataFileMidwayCheckin(n=1000):
     outputFile = TEST_BASE_DIR + "/data1_generated.csv"
     header_line = data_gen_utils.generateHeaderLine("db1", "tbl1", 2)
-    column1 = list(range(0, 1000))
-    column2 = list(range(10, 1010))
+    column1 = list(range(0, n))
+    column2 = list(range(10, n + 10))
     #### For these 3 tests, the seed is exactly the same on the server.
     np.random.seed(47)
     np.random.shuffle(column2)
@@ -50,7 +57,7 @@ def generateDataFileMidwayCheckin():
     return outputTable
 
 
-def createTestOne(for_experiment=False):
+def createTestOne():
     # write out test
     output_file, exp_output_file = data_gen_utils.openFileHandles(
         1, TEST_DIR=TEST_BASE_DIR
@@ -63,50 +70,72 @@ def createTestOne(for_experiment=False):
     output_file.write('create(col,"col1",db1.tbl1)\n')
     output_file.write('create(col,"col2",db1.tbl1)\n')
     output_file.write('load("' + DOCKER_TEST_BASE_DIR + '/data1_generated.csv")\n')
-
-    if not for_experiment:
-        # to make experiment scripting easier, we avoid shutting down the
-        # database
-        output_file.write("shutdown\n")
+    output_file.write("shutdown\n")
 
     # generate expected results
     data_gen_utils.closeFileHandles(output_file, exp_output_file)
 
 
-def createTestTwo(dataTable):
-    # write out test
+def createTestTwo(dataTable, n_queries=1):
+    # Open file handles for output and expected output
     output_file, exp_output_file = data_gen_utils.openFileHandles(
         2, TEST_DIR=TEST_BASE_DIR
     )
+
+    # Write initial test header
     output_file.write("-- Test Select + Fetch\n")
     output_file.write("--\n")
-    ### Part 1
-    # write query out
-    selectValLess = 20
-    output_file.write(
-        "-- SELECT col1 FROM tbl1 WHERE col1 < {};\n".format(selectValLess)
-    )
-    output_file.write("s1=select(db1.tbl1.col1,null,{})\n".format(selectValLess))
-    output_file.write("f1=fetch(db1.tbl1.col1,s1)\n")
-    output_file.write("print(f1)\n")
-    output_file.write("--\n")
-    # generate expected results
-    dfSelectMaskLT = dataTable["col1"] < selectValLess
-    output = dataTable[dfSelectMaskLT]["col1"]
-    exp_output_file.write(output.to_string(header=False, index=False))
-    exp_output_file.write("\n\n")
-    # write query 2 out
-    selectValGreater = 987
-    output_file.write(
-        "-- SELECT col2 FROM tbl1 WHERE col1 >= {};\n".format(selectValGreater)
-    )
-    output_file.write("s2=select(db1.tbl1.col1,{},null)\n".format(selectValGreater))
-    output_file.write("f2=fetch(db1.tbl1.col2,s2)\n")
-    output_file.write("print(f2)\n")
-    dfSelectMaskGT = dataTable["col1"] >= selectValGreater
-    output = dataTable[dfSelectMaskGT]["col2"]
-    exp_output_file.write(output.to_string(header=False, index=False))
-    exp_output_file.write("\n\n")
+
+    ### Part 1: Queries for col1 < value
+    base_select_val = 20
+    for i in range(1, n_queries + 1):
+        # Write the SQL comment and operations
+        output_file.write(f"-- SELECT col1 FROM tbl1 WHERE col1 < {base_select_val};\n")
+        output_file.write(f"s{i}=select(db1.tbl1.col1,null,{base_select_val})\n")
+        output_file.write(f"f{i}=fetch(db1.tbl1.col1,s{i})\n")
+
+        # for experimentation purposes, add avg, sum, min, max queries as well
+        if IN_EXPERIMENTATION:
+            output_file.write(f"a{i}=avg(f{i})\n")
+            output_file.write(f"sum{i}=sum(f{i})\n")
+            output_file.write(f"min{i}=min(f{i})\n")
+            output_file.write(f"max{i}=max(f{i})\n")
+            output_file.write("--\n")
+
+        output_file.write(f"print(f{i})\n")
+
+        # Generate expected results
+        df_select_mask_lt = dataTable["col1"] < base_select_val
+        output = dataTable[df_select_mask_lt]["col1"]
+        exp_output_file.write(output.to_string(header=False, index=False))
+        exp_output_file.write("\n\n")
+
+    ### Part 2: Queries for col1 >= value
+    val_greater = 987
+
+    for i in range(n_queries + 1, 2 * n_queries + 1):
+        # Write the SQL comment and operations
+        output_file.write(f"-- SELECT col2 FROM tbl1 WHERE col1 >= {val_greater};\n")
+        output_file.write(f"s{i}=select(db1.tbl1.col1,{val_greater},null)\n")
+        output_file.write(f"f{i}=fetch(db1.tbl1.col2,s{i})\n")
+        # for experimentation purposes, add avg, sum, min, max queries as well
+        if IN_EXPERIMENTATION:
+            output_file.write(f"a{i}=avg(f{i})\n")
+            output_file.write(f"sum{i}=sum(f{i})\n")
+            output_file.write(f"min{i}=min(f{i})\n")
+            output_file.write(f"max{i}=max(f{i})\n")
+            output_file.write("--\n")
+
+        else:
+            output_file.write(f"print(f{i})\n")
+
+            # Generate expected results
+            df_select_mask_gt = dataTable["col1"] >= val_greater
+            output = dataTable[df_select_mask_gt]["col2"]
+            exp_output_file.write(output.to_string(header=False, index=False))
+            exp_output_file.write("\n\n")
+
+    # Close file handles
     data_gen_utils.closeFileHandles(output_file, exp_output_file)
 
 
@@ -507,17 +536,18 @@ def createTestNine(dataTable, dataSizeTableTwo, approxSelectivity):
 
 
 def generateTestsMidwayCheckin(dataTable, for_experiment=False):
-    createTestOne(for_experiment)
+    createTestOne()
+    createTestTwo(dataTable, n_queries=N_QUERIES)
+
     if for_experiment:
         # for experimentations, we just need to load it database and not
         # interested in the next two tests
         return
-    createTestTwo(dataTable)
     createTestThree(dataTable)
 
 
-def generateOtherMilestoneOneTests(dataTable2, dataSizeTableTwo, for_experiment=False):
-    dataTable2 = createTestFour(dataTable2, for_experiment)
+def generateOtherMilestoneOneTests(dataTable2, dataSizeTableTwo):
+    dataTable2 = createTestFour(dataTable2)
     createTestFive(dataTable2, dataSizeTableTwo, 0.8)
     createTestSix(dataTable2, dataSizeTableTwo, 20)
     createTestSeven(dataTable2, dataSizeTableTwo, 20)
@@ -541,13 +571,11 @@ def generateMilestoneOneFiles(dataSizeTableTwo, randomSeed):
         if not os.path.exists(EXPERIMENT_BASE_DIR):
             os.makedirs(EXPERIMENT_BASE_DIR)
 
-        # the largest I could get on my Mac was 10^8 (withing a reasonable time)
-        data_sizes = [10**i for i in range(3, 9)]
         # create directories to hold datasets for different data sizes
         print("We are in experimentation mode")
-        print(f"preparing directories for data sizes {data_sizes}")
+        print(f"preparing directories for data sizes {DATA_SIZES}")
 
-        for size in data_sizes:
+        for size in DATA_SIZES:
             size_dir = EXPERIMENT_BASE_DIR + "/" + str(size)
             if not os.path.exists(size_dir):
                 os.makedirs(size_dir)
@@ -555,15 +583,12 @@ def generateMilestoneOneFiles(dataSizeTableTwo, randomSeed):
         global TEST_BASE_DIR
         global DOCKER_TEST_BASE_DIR
 
-        for size in data_sizes:
+        for size in DATA_SIZES:
             TEST_BASE_DIR = EXPERIMENT_BASE_DIR + "/" + str(size)
             DOCKER_TEST_BASE_DIR = TEST_BASE_DIR
-            dataTable = generateDataFileMidwayCheckin()
-            generateTestsMidwayCheckin(dataTable)
-            np.random.seed(randomSeed)
-            dataTable2 = generateDataFile2(size)
-            generateOtherMilestoneOneTests(dataTable2, size)
-            print(f"Generated data and tests for size {size:,}")
+            dataTable = generateDataFileMidwayCheckin(size)
+            generateTestsMidwayCheckin(dataTable, for_experiment=True)
+            print(f"Done generating data and tests for size {size:,}")
 
 
 def main(argv):

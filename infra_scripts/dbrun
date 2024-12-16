@@ -314,14 +314,13 @@ def run_m1_experiments(n_trials=10):
     )
     try_removing_old_results(PARSED_M1_RESULTS_PATH)
 
-    # run `./test_milestone.sh 01 5 1 <datasize` command
-    delay = 2  # server's start up delay
+    # run `./run_experiment.sh 1 <data_size>` for each data size
     mile = 1
 
     for data_size in os.listdir(M1_QUERIES_PATH):
         for run in range(n_trials):
             print(f"data_size={data_size}, run={run}")
-            cmd = f"{TEST_MILESTONE_SCRIPT} 01 {delay} {mile} {data_size}"
+            cmd = f"{RUN_EXPERIMENTS_SCRIPT} {mile} {data_size}"
             log_file_path = os.path.join(M1_QUERIES_PATH, data_size, f"run={run}.log")
 
             process = run_piped_cmd(cmd, log_file_path)
