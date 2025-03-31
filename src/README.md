@@ -41,25 +41,16 @@
 │           ├── common.h
 │           └── utils.h
 ├── lib
-│   ├── impl
-│   │   ├── btree.c
-│   │   ├── hashmap.c
-│   │   ├── mempool.c
-│   │   ├── threadpool.c
-│   │   └── vector.c
-│   └── include
-│       ├── btree.h
-│       ├── hashmap.h
-│       ├── mempool.h
-│       ├── threadpool.h
-│       └── vector.h
-└── project0
-    ├── Makefile
-    ├── README
-    ├── benchmark.c
-    ├── hash_table.c
-    ├── hash_table.h
-    ├── main.c
-    └── test.c
-
+    ├── impl
+    │   ├── btree.c
+    │   ├── hashmap.c
+    │   ├── mempool.c
+    │   ├── threadpool.c
+    │   └── vector.c
+    └── include
+        ├── btree.h
+        ├── hashmap.h
+        ├── mempool.h
+        ├── threadpool.h
+        └── vector.h
 ```
